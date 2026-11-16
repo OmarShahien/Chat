@@ -4,7 +4,6 @@ import {
   Copy,
   Link2,
   MessageSquare,
-  Phone,
   Search,
   UserMinus,
   X,
@@ -41,7 +40,6 @@ interface FriendsPaneProps {
   initialInviteCode?: string | null;
   onConsumeInviteCode?: () => void;
   onOpenChat: (chatId: string) => void;
-  onStartVoiceCall: (friend: UserProfile) => void;
   onToast: (msg: string) => void;
 }
 
@@ -57,7 +55,6 @@ export const FriendsPane: React.FC<FriendsPaneProps> = ({
   initialInviteCode,
   onConsumeInviteCode,
   onOpenChat,
-  onStartVoiceCall,
   onToast,
 }) => {
   const [queryText, setQueryText] = useState('');
@@ -152,7 +149,7 @@ export const FriendsPane: React.FC<FriendsPaneProps> = ({
   return (
     <div
       className={`flex flex-col h-full w-full overflow-y-auto pb-20 md:pb-6 ${
-        isLight ? 'bg-white text-[#111b21]' : 'bg-[#111b21] text-[#e9edef]'
+        isLight ? 'bg-white text-[#0a1630]' : 'bg-[#0a1630] text-[#eaf2ff]'
       }`}
     >
       {/* Header */}
@@ -172,43 +169,43 @@ export const FriendsPane: React.FC<FriendsPaneProps> = ({
           >
             <div
               className={`flex-1 flex items-center gap-2.5 px-3 h-[38px] rounded-[8px] text-[14px] ${
-                isLight ? 'bg-[#f0f2f5]' : 'bg-[#202c33]'
+                isLight ? 'bg-[#eaf1fc]' : 'bg-[#12254a]'
               }`}
             >
-              <Search className="w-4 h-4 text-[#8696a0] shrink-0" />
+              <Search className="w-4 h-4 text-[#8fa7cc] shrink-0" />
               <input
                 type="text"
                 value={queryText}
                 onChange={(e) => setQueryText(e.target.value)}
                 placeholder="Add by email, @username, or code"
-                className="w-full bg-transparent outline-none text-[14px] placeholder-[#8696a0]"
+                className="w-full bg-transparent outline-none text-[14px] placeholder-[#8fa7cc]"
               />
             </div>
             <button
               type="submit"
               disabled={searching || !queryText.trim()}
-              className="px-4 h-[38px] rounded-[8px] bg-[#00a884] hover:bg-[#06cf9c] disabled:opacity-50 text-[#111b21] text-[13.5px] font-medium transition cursor-pointer shrink-0"
+              className="px-4 h-[38px] rounded-[8px] bg-[#3b82f6] hover:bg-[#60a5fa] disabled:opacity-50 text-white text-[13.5px] font-medium transition cursor-pointer shrink-0"
             >
               {searching ? '...' : 'Search'}
             </button>
           </form>
 
           {/* My Shareable Details */}
-          <div className="flex items-center justify-between text-[12.5px] text-[#8696a0] px-0.5 pt-0.5">
+          <div className="flex items-center justify-between text-[12.5px] text-[#8fa7cc] px-0.5 pt-0.5">
             <span>
               Your code: <strong className="text-current font-mono">{me.friendCode}</strong> · @{me.username}
             </span>
             <div className="flex items-center gap-3">
               <button
                 onClick={handleCopyCode}
-                className="inline-flex items-center gap-1 text-[#00a884] hover:underline cursor-pointer"
+                className="inline-flex items-center gap-1 text-[#3b82f6] hover:underline cursor-pointer"
               >
                 {copiedCode ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
                 Copy
               </button>
               <button
                 onClick={handleCopyInviteLink}
-                className="inline-flex items-center gap-1 text-[#00a884] hover:underline cursor-pointer"
+                className="inline-flex items-center gap-1 text-[#3b82f6] hover:underline cursor-pointer"
               >
                 {copiedLink ? <Check className="w-3.5 h-3.5" /> : <Link2 className="w-3.5 h-3.5" />}
                 Invite link
@@ -223,14 +220,14 @@ export const FriendsPane: React.FC<FriendsPaneProps> = ({
           {foundUser && (
             <div
               className={`rounded-[8px] p-3.5 border space-y-3 ${
-                isLight ? 'bg-[#f0f2f5] border-[#d1d7db]' : 'bg-[#202c33] border-[#2a3942]'
+                isLight ? 'bg-[#eaf1fc] border-[#cfdcf0]' : 'bg-[#12254a] border-[#1d3764]'
               }`}
             >
               <div className="flex items-center gap-3">
                 <Avatar name={foundUser.displayName} src={foundUser.photoURL} size="md" />
                 <div className="flex-1 min-w-0">
                   <p className="font-medium text-[15px] truncate">{foundUser.displayName}</p>
-                  <p className="text-[13px] text-[#8696a0] truncate">@{foundUser.username}</p>
+                  <p className="text-[13px] text-[#8fa7cc] truncate">@{foundUser.username}</p>
                 </div>
               </div>
 
@@ -240,12 +237,12 @@ export const FriendsPane: React.FC<FriendsPaneProps> = ({
                     const cId = await ensureDirectChatOpen(me, foundUser.uid);
                     onOpenChat(cId);
                   }}
-                  className="w-full py-2 rounded-[6px] bg-[#00a884] text-[#111b21] text-[13.5px] font-medium cursor-pointer"
+                  className="w-full py-2 rounded-[6px] bg-[#3b82f6] text-white text-[13.5px] font-medium cursor-pointer"
                 >
                   Open chat
                 </button>
               ) : outgoingRequests[foundUser.uid] ? (
-                <p className="text-[13px] text-[#8696a0] text-center py-1">Request pending</p>
+                <p className="text-[13px] text-[#8fa7cc] text-center py-1">Request pending</p>
               ) : (
                 <div className="space-y-2">
                   <input
@@ -254,13 +251,13 @@ export const FriendsPane: React.FC<FriendsPaneProps> = ({
                     onChange={(e) => setNoteText(e.target.value)}
                     placeholder="Add a message (optional)"
                     className={`w-full px-3 py-2 rounded-[6px] text-[13px] outline-none border ${
-                      isLight ? 'bg-white border-[#d1d7db]' : 'bg-[#111b21] border-[#2a3942]'
+                      isLight ? 'bg-white border-[#cfdcf0]' : 'bg-[#0a1630] border-[#1d3764]'
                     }`}
                   />
                   <button
                     onClick={handleSendRequest}
                     disabled={busyUid === foundUser.uid}
-                    className="w-full py-2 rounded-[6px] bg-[#00a884] hover:bg-[#06cf9c] text-[#111b21] text-[13.5px] font-medium transition cursor-pointer"
+                    className="w-full py-2 rounded-[6px] bg-[#3b82f6] hover:bg-[#60a5fa] text-white text-[13.5px] font-medium transition cursor-pointer"
                   >
                     {busyUid === foundUser.uid ? 'Sending...' : 'Add friend'}
                   </button>
@@ -273,7 +270,7 @@ export const FriendsPane: React.FC<FriendsPaneProps> = ({
         {/* Incoming Requests */}
         {incomingList.length > 0 && (
           <div className="space-y-2">
-            <h2 className="text-[13px] font-medium text-[#00a884]">
+            <h2 className="text-[13px] font-medium text-[#3b82f6]">
               Friend requests ({incomingList.length})
             </h2>
             <div className="space-y-2">
@@ -281,16 +278,16 @@ export const FriendsPane: React.FC<FriendsPaneProps> = ({
                 <div
                   key={req.fromUid}
                   className={`rounded-[8px] p-3 border flex items-center justify-between gap-3 ${
-                    isLight ? 'bg-[#f0f2f5] border-[#d1d7db]' : 'bg-[#202c33] border-[#2a3942]'
+                    isLight ? 'bg-[#eaf1fc] border-[#cfdcf0]' : 'bg-[#12254a] border-[#1d3764]'
                   }`}
                 >
                   <div className="flex items-center gap-3 min-w-0">
                     <Avatar name={req.fromName} src={req.fromPhoto} size="sm" />
                     <div className="min-w-0">
                       <p className="text-[14.5px] font-medium truncate">{req.fromName}</p>
-                      <p className="text-[12.5px] text-[#8696a0] truncate">@{req.fromUsername}</p>
+                      <p className="text-[12.5px] text-[#8fa7cc] truncate">@{req.fromUsername}</p>
                       {req.message && (
-                        <p className="text-[12.5px] text-[#8696a0] mt-0.5 truncate">
+                        <p className="text-[12.5px] text-[#8fa7cc] mt-0.5 truncate">
                           "{req.message}"
                         </p>
                       )}
@@ -310,14 +307,14 @@ export const FriendsPane: React.FC<FriendsPaneProps> = ({
                         }
                       }}
                       disabled={busyUid === req.fromUid}
-                      className="px-3 py-1.5 rounded-[6px] bg-[#00a884] hover:bg-[#06cf9c] text-[#111b21] text-[13px] font-medium cursor-pointer"
+                      className="px-3 py-1.5 rounded-[6px] bg-[#3b82f6] hover:bg-[#60a5fa] text-white text-[13px] font-medium cursor-pointer"
                     >
                       Accept
                     </button>
                     <button
                       onClick={() => declineFriendRequest(me.uid, req.fromUid)}
                       title="Decline"
-                      className="p-1.5 rounded-[6px] text-[#8696a0] hover:text-[#f15c6d] cursor-pointer"
+                      className="p-1.5 rounded-[6px] text-[#8fa7cc] hover:text-[#f15c6d] cursor-pointer"
                     >
                       <X className="w-4 h-4" />
                     </button>
@@ -331,7 +328,7 @@ export const FriendsPane: React.FC<FriendsPaneProps> = ({
         {/* Sent Requests */}
         {outgoingList.length > 0 && (
           <div className="space-y-1.5">
-            <h2 className="text-[13px] font-medium text-[#8696a0]">
+            <h2 className="text-[13px] font-medium text-[#8fa7cc]">
               Sent ({outgoingList.length})
             </h2>
             {outgoingList.map((req) => (
@@ -343,12 +340,12 @@ export const FriendsPane: React.FC<FriendsPaneProps> = ({
                   <Avatar name={req.toName || 'User'} src={req.toPhoto} size="sm" />
                   <div className="min-w-0">
                     <p className="text-[14.5px] truncate">{req.toName || 'User'}</p>
-                    <p className="text-[12.5px] text-[#8696a0] truncate">Pending</p>
+                    <p className="text-[12.5px] text-[#8fa7cc] truncate">Pending</p>
                   </div>
                 </div>
                 <button
                   onClick={() => cancelOutgoingFriendRequest(me.uid, req.toUid)}
-                  className="text-[13px] text-[#8696a0] hover:text-[#f15c6d] cursor-pointer"
+                  className="text-[13px] text-[#8fa7cc] hover:text-[#f15c6d] cursor-pointer"
                 >
                   Cancel
                 </button>
@@ -359,12 +356,12 @@ export const FriendsPane: React.FC<FriendsPaneProps> = ({
 
         {/* Contacts List */}
         <div className="space-y-1">
-          <h2 className="text-[13px] font-medium text-[#00a884] pb-1">
+          <h2 className="text-[13px] font-medium text-[#3b82f6] pb-1">
             Contacts ({friendRecords.length})
           </h2>
 
           {friendRecords.length === 0 ? (
-            <p className="py-8 text-center text-[13.5px] text-[#8696a0]">
+            <p className="py-8 text-center text-[13.5px] text-[#8fa7cc]">
               No contacts yet
             </p>
           ) : (
@@ -378,7 +375,7 @@ export const FriendsPane: React.FC<FriendsPaneProps> = ({
                 <div
                   key={rec.uid}
                   className={`rounded-[8px] p-2 flex items-center justify-between gap-2 transition ${
-                    isLight ? 'hover:bg-[#f5f6f6]' : 'hover:bg-[#202c33]'
+                    isLight ? 'hover:bg-[#f1f6fd]' : 'hover:bg-[#12254a]'
                   }`}
                 >
                   <div
@@ -396,15 +393,15 @@ export const FriendsPane: React.FC<FriendsPaneProps> = ({
                     />
                     <div className="min-w-0">
                       <p className="text-[15px] truncate">{name}</p>
-                      <p className="text-[13px] text-[#8696a0] truncate">
+                      <p className="text-[13px] text-[#8fa7cc] truncate">
                         {isOnline ? (
-                          <span className="text-[#00a884]">online</span>
+                          <span className="text-[#3b82f6]">online</span>
                         ) : pres?.hidden ? (
-                          friend?.about || `@${friend?.username || ''}`
+                          `@${friend?.username || ''}`
                         ) : pres?.lastSeen ? (
                           formatLastSeen(pres.lastSeen)
                         ) : (
-                          friend?.about || `@${friend?.username || ''}`
+                          `@${friend?.username || ''}`
                         )}
                       </p>
                     </div>
@@ -417,20 +414,10 @@ export const FriendsPane: React.FC<FriendsPaneProps> = ({
                         onOpenChat(chatId);
                       }}
                       title="Message"
-                      className="p-2 rounded-full text-[#8696a0] hover:text-[#00a884] cursor-pointer"
+                      className="p-2 rounded-full text-[#8fa7cc] hover:text-[#3b82f6] cursor-pointer"
                     >
                       <MessageSquare className="w-4 h-4" />
                     </button>
-
-                    {friend && (
-                      <button
-                        onClick={() => onStartVoiceCall(friend)}
-                        title="Voice call"
-                        className="p-2 rounded-full text-[#8696a0] hover:text-[#00a884] cursor-pointer"
-                      >
-                        <Phone className="w-4 h-4" />
-                      </button>
-                    )}
 
                     <button
                       onClick={async () => {
@@ -440,7 +427,7 @@ export const FriendsPane: React.FC<FriendsPaneProps> = ({
                         }
                       }}
                       title="Remove"
-                      className="p-2 rounded-full text-[#8696a0] hover:text-[#f15c6d] cursor-pointer"
+                      className="p-2 rounded-full text-[#8fa7cc] hover:text-[#f15c6d] cursor-pointer"
                     >
                       <UserMinus className="w-4 h-4" />
                     </button>
@@ -453,8 +440,8 @@ export const FriendsPane: React.FC<FriendsPaneProps> = ({
 
         {/* Blocked Contacts */}
         {blockedUids.length > 0 && (
-          <div className="space-y-1.5 pt-3 border-t border-[#222d34]">
-            <h2 className="text-[13px] font-medium text-[#8696a0]">
+          <div className="space-y-1.5 pt-3 border-t border-[#17294d]">
+            <h2 className="text-[13px] font-medium text-[#8fa7cc]">
               Blocked ({blockedUids.length})
             </h2>
             {blockedUids.map((bUid) => {
@@ -467,7 +454,7 @@ export const FriendsPane: React.FC<FriendsPaneProps> = ({
                       await setBlockedUser(me.uid, bUid, false);
                       onToast('Unblocked');
                     }}
-                    className="text-[#00a884] hover:underline cursor-pointer"
+                    className="text-[#3b82f6] hover:underline cursor-pointer"
                   >
                     Unblock
                   </button>

@@ -46,8 +46,8 @@ export const Avatar: React.FC<AvatarProps> = ({
 
   const ringClasses = hasRing
     ? ringSeen
-      ? 'ring-2 ring-[#8696a0] ring-offset-2 ring-offset-[#111b21]'
-      : 'ring-2 ring-[#00a884] ring-offset-2 ring-offset-[#111b21]'
+      ? 'ring-2 ring-[#8fa7cc] ring-offset-2 ring-offset-[#0a1630]'
+      : 'ring-2 ring-[#3b82f6] ring-offset-2 ring-offset-[#0a1630]'
     : '';
 
   return (
@@ -55,7 +55,7 @@ export const Avatar: React.FC<AvatarProps> = ({
       <div
         className={`${SIZE_MAP[size]} ${ringClasses} rounded-full overflow-hidden flex items-center justify-center font-semibold text-white shadow-xs`}
         style={{
-          backgroundColor: isSelf ? '#00a884' : isGroup && (!src || imgError) ? '#0284c7' : bgColor,
+          backgroundColor: isSelf ? '#3b82f6' : isGroup && (!src || imgError) ? '#0284c7' : bgColor,
         }}
       >
         {isSelf && (!src || imgError) ? (
@@ -77,7 +77,7 @@ export const Avatar: React.FC<AvatarProps> = ({
 
       {online && (
         <span
-          className={`absolute ${DOT_MAP[size]} rounded-full bg-[#00a884] border-[#111b21]`}
+          className={`absolute ${DOT_MAP[size]} rounded-full bg-[#3b82f6] border-[#0a1630]`}
           title="Online"
         />
       )}

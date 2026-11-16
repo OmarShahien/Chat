@@ -96,6 +96,8 @@ export interface UserChatMeta {
   favorite?: boolean;
   clearedAt?: number;
   wallpaper?: WallpaperId;
+  /** Salted hash of the chat passcode; present only while the chat is locked. */
+  lockHash?: string;
   lastMessageId?: string;
   lastMessageText: string;
   lastMessageAt: number;
@@ -171,35 +173,4 @@ export interface TypingEntry {
   state: 'typing' | 'recording';
   name: string;
   updatedAt: number;
-}
-
-export interface StatusUpdate {
-  id: string;
-  uid: string;
-  userName: string;
-  userPhoto: string;
-  type: 'text' | 'image';
-  text: string;
-  bgGradient?: string;
-  imageDataUrl?: string;
-  createdAt: number;
-  expiresAt: number;
-  viewedBy?: Record<string, number>;
-}
-
-export interface CallSession {
-  id: string;
-  callerId: string;
-  callerName: string;
-  callerPhoto: string;
-  calleeId: string;
-  calleeName: string;
-  calleePhoto: string;
-  status: 'ringing' | 'connected' | 'declined' | 'ended';
-  offer?: { type: RTCSdpType; sdp: string };
-  answer?: { type: RTCSdpType; sdp: string };
-  callerCandidates?: Record<string, RTCIceCandidateInit>;
-  calleeCandidates?: Record<string, RTCIceCandidateInit>;
-  createdAt: number;
-  connectedAt?: number;
 }

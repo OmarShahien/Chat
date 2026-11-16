@@ -1,18 +1,15 @@
 import React, { useRef, useState } from 'react';
 import { Camera, LogOut } from 'lucide-react';
-import type { ThemeMode, UserProfile, WallpaperId } from '../types';
+import type { ThemeMode, UserProfile } from '../types';
 import { compressAvatarFile } from '../utils/media';
-import { WALLPAPER_OPTIONS } from '../utils/wallpapers';
 import { updateMyProfile } from '../services/chatService';
 import { Avatar } from './Avatar';
 
 interface SettingsPaneProps {
   me: UserProfile;
   theme: ThemeMode;
-  wallpaper: WallpaperId;
   onProfileUpdated: (updated: UserProfile) => void;
   onChangeTheme: (t: ThemeMode) => void;
-  onChangeWallpaper: (w: WallpaperId) => void;
   onSignOut: () => void;
   onToast: (msg: string) => void;
 }
@@ -20,16 +17,13 @@ interface SettingsPaneProps {
 export const SettingsPane: React.FC<SettingsPaneProps> = ({
   me,
   theme,
-  wallpaper,
   onProfileUpdated,
   onChangeTheme,
-  onChangeWallpaper,
   onSignOut,
   onToast,
 }) => {
   const [displayName, setDisplayName] = useState(me.displayName);
   const [username, setUsername] = useState(me.username);
-  const [about, setAbout] = useState(me.about);
   const [saving, setSaving] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -62,7 +56,6 @@ export const SettingsPane: React.FC<SettingsPaneProps> = ({
       const updated = await updateMyProfile(me, {
         displayName,
         username,
-        about,
       });
       onProfileUpdated(updated);
       onToast('Profile saved');
@@ -89,7 +82,7 @@ export const SettingsPane: React.FC<SettingsPaneProps> = ({
   return (
     <div
       className={`flex flex-col h-full w-full overflow-y-auto pb-20 md:pb-6 ${
-        isLight ? 'bg-white text-[#111b21]' : 'bg-[#111b21] text-[#e9edef]'
+        isLight ? 'bg-white text-[#0a1630]' : 'bg-[#0a1630] text-[#eaf2ff]'
       }`}
     >
       <div className="h-[59px] px-4 flex items-center shrink-0">
@@ -104,7 +97,7 @@ export const SettingsPane: React.FC<SettingsPaneProps> = ({
             <button
               onClick={() => fileInputRef.current?.click()}
               title="Change photo"
-              className="absolute bottom-0 right-0 p-2 rounded-full bg-[#00a884] text-[#111b21] shadow-md hover:bg-[#06cf9c] cursor-pointer"
+              className="absolute bottom-0 right-0 p-2 rounded-full bg-[#3b82f6] text-white shadow-md hover:bg-[#60a5fa] cursor-pointer"
             >
               <Camera className="w-4 h-4" />
             </button>
@@ -116,46 +109,33 @@ export const SettingsPane: React.FC<SettingsPaneProps> = ({
               className="hidden"
             />
           </div>
-          <p className="text-[13px] text-[#8696a0]">{me.email}</p>
+          <p className="text-[13px] text-[#8fa7cc]">{me.email}</p>
         </div>
 
         {/* Profile Form */}
         <form onSubmit={handleSaveProfile} className="space-y-3.5">
           <div>
-            <label className="text-[13px] text-[#00a884]">Your name</label>
+            <label className="text-[13px] text-[#3b82f6]">Your name</label>
             <input
               type="text"
               value={displayName}
               onChange={(e) => setDisplayName(e.target.value)}
               maxLength={40}
               className={`mt-1 w-full px-3 py-2 rounded-[8px] text-[14.5px] outline-none ${
-                isLight ? 'bg-[#f0f2f5]' : 'bg-[#202c33]'
+                isLight ? 'bg-[#eaf1fc]' : 'bg-[#12254a]'
               }`}
             />
           </div>
 
           <div>
-            <label className="text-[13px] text-[#00a884]">Username</label>
+            <label className="text-[13px] text-[#3b82f6]">Username</label>
             <input
               type="text"
               value={username}
               onChange={(e) => setUsername(e.target.value)}
               maxLength={24}
               className={`mt-1 w-full px-3 py-2 rounded-[8px] text-[14.5px] outline-none ${
-                isLight ? 'bg-[#f0f2f5]' : 'bg-[#202c33]'
-              }`}
-            />
-          </div>
-
-          <div>
-            <label className="text-[13px] text-[#00a884]">About</label>
-            <input
-              type="text"
-              value={about}
-              onChange={(e) => setAbout(e.target.value)}
-              maxLength={120}
-              className={`mt-1 w-full px-3 py-2 rounded-[8px] text-[14.5px] outline-none ${
-                isLight ? 'bg-[#f0f2f5]' : 'bg-[#202c33]'
+                isLight ? 'bg-[#eaf1fc]' : 'bg-[#12254a]'
               }`}
             />
           </div>
@@ -163,67 +143,67 @@ export const SettingsPane: React.FC<SettingsPaneProps> = ({
           <button
             type="submit"
             disabled={saving}
-            className="w-full py-2 rounded-[8px] bg-[#00a884] hover:bg-[#06cf9c] text-[#111b21] font-medium text-[14px] transition cursor-pointer"
+            className="w-full py-2 rounded-[8px] bg-[#3b82f6] hover:bg-[#60a5fa] text-white font-medium text-[14px] transition cursor-pointer"
           >
             {saving ? 'Saving...' : 'Save'}
           </button>
         </form>
 
         {/* Privacy */}
-        <div className="space-y-3 pt-4 border-t border-[#222d34]">
-          <h2 className="text-[13px] font-medium text-[#00a884]">Privacy</h2>
+        <div className="space-y-3 pt-4 border-t border-[#17294d]">
+          <h2 className="text-[13px] font-medium text-[#3b82f6]">Privacy</h2>
 
           <label className="flex items-center justify-between py-1 cursor-pointer">
             <div>
               <p className="text-[14.5px]">Read receipts</p>
-              <p className="text-[12.5px] text-[#8696a0]">Show blue checkmarks when messages are read</p>
+              <p className="text-[12.5px] text-[#8fa7cc]">Show blue checkmarks when messages are read</p>
             </div>
             <input
               type="checkbox"
               checked={privacy.readReceipts}
               onChange={() => togglePrivacyField('readReceipts')}
-              className="accent-[#00a884] w-4 h-4"
+              className="accent-[#3b82f6] w-4 h-4"
             />
           </label>
 
           <label className="flex items-center justify-between py-1 cursor-pointer">
             <div>
               <p className="text-[14.5px]">Hide online status</p>
-              <p className="text-[12.5px] text-[#8696a0]">Hide your online and last seen activity</p>
+              <p className="text-[12.5px] text-[#8fa7cc]">Hide your online and last seen activity</p>
             </div>
             <input
               type="checkbox"
               checked={privacy.hideOnline}
               onChange={() => togglePrivacyField('hideOnline')}
-              className="accent-[#00a884] w-4 h-4"
+              className="accent-[#3b82f6] w-4 h-4"
             />
           </label>
 
           <label className="flex items-center justify-between py-1 cursor-pointer">
             <div>
               <p className="text-[14.5px]">Notification sounds</p>
-              <p className="text-[12.5px] text-[#8696a0]">Play sounds for incoming messages</p>
+              <p className="text-[12.5px] text-[#8fa7cc]">Play sounds for incoming messages</p>
             </div>
             <input
               type="checkbox"
               checked={privacy.soundEnabled}
               onChange={() => togglePrivacyField('soundEnabled')}
-              className="accent-[#00a884] w-4 h-4"
+              className="accent-[#3b82f6] w-4 h-4"
             />
           </label>
         </div>
 
-        {/* Theme & Chat Wallpaper */}
-        <div className="space-y-3 pt-4 border-t border-[#222d34]">
-          <h2 className="text-[13px] font-medium text-[#00a884]">Theme & wallpaper</h2>
+        {/* Theme */}
+        <div className="space-y-3 pt-4 border-t border-[#17294d]">
+          <h2 className="text-[13px] font-medium text-[#3b82f6]">Theme</h2>
 
           <div className="grid grid-cols-2 gap-2">
             <button
               onClick={() => onChangeTheme('dark')}
               className={`py-2 rounded-[8px] border text-[13.5px] cursor-pointer ${
                 theme === 'dark'
-                  ? 'border-[#00a884] text-[#00a884] font-medium'
-                  : 'border-[#2a3942] text-[#8696a0]'
+                  ? 'border-[#3b82f6] text-[#3b82f6] font-medium'
+                  : 'border-[#1d3764] text-[#8fa7cc]'
               }`}
             >
               Dark
@@ -232,38 +212,17 @@ export const SettingsPane: React.FC<SettingsPaneProps> = ({
               onClick={() => onChangeTheme('light')}
               className={`py-2 rounded-[8px] border text-[13.5px] cursor-pointer ${
                 theme === 'light'
-                  ? 'border-[#008069] text-[#008069] font-medium'
-                  : 'border-[#d1d7db] text-[#8696a0]'
+                  ? 'border-[#1d4ed8] text-[#1d4ed8] font-medium'
+                  : 'border-[#cfdcf0] text-[#8fa7cc]'
               }`}
             >
               Light
             </button>
           </div>
-
-          <div className="grid grid-cols-3 gap-2">
-            {WALLPAPER_OPTIONS.map((wp) => {
-              const selected = wallpaper === wp.id;
-              return (
-                <button
-                  key={wp.id}
-                  onClick={() => onChangeWallpaper(wp.id)}
-                  className={`rounded-[6px] p-1 border text-left transition cursor-pointer ${
-                    selected ? 'border-[#00a884]' : 'border-transparent'
-                  }`}
-                >
-                  <div
-                    className="h-9 rounded-[4px] w-full mb-1"
-                    style={{ background: wp.previewSwatch }}
-                  />
-                  <p className="text-[11px] text-[#8696a0] truncate px-0.5">{wp.name}</p>
-                </button>
-              );
-            })}
-          </div>
         </div>
 
         {/* Sign Out */}
-        <div className="pt-4 border-t border-[#222d34]">
+        <div className="pt-4 border-t border-[#17294d]">
           <button
             onClick={onSignOut}
             className="w-full py-2.5 px-4 rounded-[8px] text-[#f15c6d] hover:bg-[#f15c6d]/10 text-[14px] font-medium flex items-center gap-2.5 transition cursor-pointer"

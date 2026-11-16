@@ -151,12 +151,12 @@ export function getInitials(name?: string): string {
 
 export function getAvatarColor(seed: string): string {
   const colors = [
-    '#00a884',
+    '#3b82f6',
     '#0284c7',
-    '#6d28d9',
-    '#be185d',
-    '#c2410c',
-    '#0f766e',
+    '#4f46e5',
+    '#1d4ed8',
+    '#0ea5e9',
+    '#6366f1',
     '#4338ca',
     '#475569',
   ];

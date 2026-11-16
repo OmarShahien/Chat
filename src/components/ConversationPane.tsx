@@ -7,9 +7,9 @@ import {
   FileText,
   Image as ImageIcon,
   Mic,
+  Lock,
   MoreVertical,
   Pencil,
-  Phone,
   Pin,
   Plus,
   Search,
@@ -28,7 +28,6 @@ import type {
   TypingEntry,
   UserChatMeta,
   UserProfile,
-  WallpaperId,
 } from '../types';
 import {
   editChatMessage,
@@ -52,7 +51,7 @@ import {
   playUiSound,
   type CompressedImageResult,
 } from '../utils/media';
-import { getWallpaperStyle } from '../utils/wallpapers';
+import { CHAT_WALLPAPER_STYLE } from '../utils/wallpapers';
 import { Avatar } from './Avatar';
 import { InfoDrawer } from './InfoDrawer';
 import { MessageBubble } from './MessageBubble';
@@ -61,7 +60,6 @@ import { PollModal } from './Modals';
 interface ConversationPaneProps {
   me: UserProfile;
   theme: ThemeMode;
-  defaultWallpaper: WallpaperId;
   room: ChatRoom | null;
   meta?: UserChatMeta;
   usersMap: Record<string, UserProfile>;
@@ -72,15 +70,13 @@ interface ConversationPaneProps {
   onBackMobile: () => void;
   onForwardMessage: (msg: ChatMessage) => void;
   onOpenLightbox: (src: string, caption?: string) => void;
-  onStartVoiceCall: (friend: UserProfile) => void;
-  onMessagesSnapshot?: (chatId: string, msgs: ChatMessage[]) => void;
+  onToggleLock: (chatId: string) => void;
   onToast: (msg: string) => void;
 }
 
 export const ConversationPane: React.FC<ConversationPaneProps> = ({
   me,
   theme,
-  defaultWallpaper,
   room,
   meta,
   usersMap,
@@ -91,8 +87,7 @@ export const ConversationPane: React.FC<ConversationPaneProps> = ({
   onBackMobile,
   onForwardMessage,
   onOpenLightbox,
-  onStartVoiceCall,
-  onMessagesSnapshot,
+  onToggleLock,
   onToast,
 }) => {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -148,7 +143,6 @@ export const ConversationPane: React.FC<ConversationPaneProps> = ({
 
     const unsub = subscribeChatMessages(room.id, (list) => {
       setMessages(list);
-      onMessagesSnapshot?.(room.id, list);
       markChatMessagesRead(room.id, list, me.uid, sendReadReceipts);
     });
 
@@ -177,19 +171,29 @@ export const ConversationPane: React.FC<ConversationPaneProps> = ({
     });
   }, [messages, meta?.clearedAt, me.uid, searchOpen, chatSearchQuery]);
 
-  // Classic calm WhatsApp Web empty state
+  const filteredEmojis = useMemo(() => {
+    if (emojiSearch.trim()) {
+      const q = emojiSearch.trim().toLowerCase();
+      return EMOJI_CATEGORIES.flatMap((c) => c.emojis).filter(
+        (e) => e.keywords.includes(q) || e.char.includes(q)
+      );
+    }
+    return EMOJI_CATEGORIES.find((c) => c.id === emojiCat)?.emojis || [];
+  }, [emojiCat, emojiSearch]);
+
+  // Empty state (no conversation selected)
   if (!room) {
     return (
       <div
-        className={`flex-1 h-full flex flex-col items-center justify-center p-8 text-center select-none border-b-[6px] border-[#00a884] ${
+        className={`flex-1 h-full flex flex-col items-center justify-center p-8 text-center select-none border-b-[6px] border-[#3b82f6] ${
           isLight
-            ? 'bg-[#f0f2f5] text-[#41525d]'
-            : 'bg-[#222e35] text-[#e9edef]'
+            ? 'bg-[#eaf1fc] text-[#3b4f73]'
+            : 'bg-[#0c1b36] text-[#eaf2ff]'
         }`}
       >
         <div className="max-w-[460px] space-y-4">
           <h2 className="text-[32px] font-light">Chat Web</h2>
-          <p className="text-[14px] text-[#8696a0] leading-6">
+          <p className="text-[14px] text-[#8fa7cc] leading-6">
             Send and receive messages from your browser. Select a conversation on the left or add a contact to begin.
           </p>
         </div>
@@ -228,7 +232,7 @@ export const ConversationPane: React.FC<ConversationPaneProps> = ({
   if (activeTypers.length > 0) {
     const t = activeTypers[0];
     subtitleNode = (
-      <span className="text-[#00a884]">
+      <span className="text-[#3b82f6]">
         {room.type === 'group' ? `${t.name} is ` : ''}
         {t.state === 'recording' ? 'recording audio...' : 'typing...'}
       </span>
@@ -480,18 +484,6 @@ export const ConversationPane: React.FC<ConversationPaneProps> = ({
     }
   };
 
-  const filteredEmojis = useMemo(() => {
-    if (emojiSearch.trim()) {
-      const q = emojiSearch.trim().toLowerCase();
-      return EMOJI_CATEGORIES.flatMap((c) => c.emojis).filter(
-        (e) => e.keywords.includes(q) || e.char.includes(q)
-      );
-    }
-    return EMOJI_CATEGORIES.find((c) => c.id === emojiCat)?.emojis || [];
-  }, [emojiCat, emojiSearch]);
-
-  const activeWallpaper = meta?.wallpaper || defaultWallpaper;
-
   return (
     <div className="flex-1 h-full flex overflow-hidden relative">
       <div className="flex-1 flex flex-col h-full min-w-0 relative">
@@ -499,14 +491,14 @@ export const ConversationPane: React.FC<ConversationPaneProps> = ({
         <header
           className={`h-[59px] px-3 sm:px-4 flex items-center justify-between border-b shrink-0 z-20 ${
             isLight
-              ? 'bg-[#f0f2f5] border-[#d1d7db] text-[#111b21]'
-              : 'bg-[#202c33] border-[#2a3942] text-[#e9edef]'
+              ? 'bg-[#eaf1fc] border-[#cfdcf0] text-[#0a1630]'
+              : 'bg-[#12254a] border-[#1d3764] text-[#eaf2ff]'
           }`}
         >
           <div className="flex items-center gap-2.5 min-w-0 flex-1">
             <button
               onClick={onBackMobile}
-              className="md:hidden p-1.5 rounded-full text-[#8696a0] hover:text-current cursor-pointer"
+              className="md:hidden p-1.5 rounded-full text-[#8fa7cc] hover:text-current cursor-pointer"
             >
               <ArrowLeft className="w-5 h-5" />
             </button>
@@ -525,19 +517,23 @@ export const ConversationPane: React.FC<ConversationPaneProps> = ({
               />
               <div className="min-w-0">
                 <h2 className="text-[15.5px] font-normal truncate">{chatTitle}</h2>
-                <div className="text-[12.5px] text-[#8696a0] truncate">{subtitleNode}</div>
+                <div className="text-[12.5px] text-[#8fa7cc] truncate">{subtitleNode}</div>
               </div>
             </div>
           </div>
 
           <div className="flex items-center gap-1 shrink-0">
-            {room.type === 'direct' && peerUser && (
+            {meta && (
               <button
-                onClick={() => onStartVoiceCall(peerUser)}
-                title="Voice call"
-                className="w-10 h-10 rounded-full flex items-center justify-center text-[#8696a0] hover:text-current hover:bg-black/10 transition cursor-pointer"
+                onClick={() => onToggleLock(room.id)}
+                title={meta.lockHash ? 'Remove chat lock' : 'Lock chat'}
+                className={`w-10 h-10 rounded-full flex items-center justify-center transition cursor-pointer ${
+                  meta.lockHash
+                    ? 'text-[#3b82f6] bg-black/10'
+                    : 'text-[#8fa7cc] hover:text-current hover:bg-black/10'
+                }`}
               >
-                <Phone className="w-[19px] h-[19px]" />
+                <Lock className="w-[18px] h-[18px]" />
               </button>
             )}
 
@@ -549,8 +545,8 @@ export const ConversationPane: React.FC<ConversationPaneProps> = ({
               title="Search"
               className={`w-10 h-10 rounded-full flex items-center justify-center transition cursor-pointer ${
                 searchOpen
-                  ? 'text-[#00a884] bg-black/10'
-                  : 'text-[#8696a0] hover:text-current hover:bg-black/10'
+                  ? 'text-[#3b82f6] bg-black/10'
+                  : 'text-[#8fa7cc] hover:text-current hover:bg-black/10'
               }`}
             >
               <Search className="w-[19px] h-[19px]" />
@@ -561,8 +557,8 @@ export const ConversationPane: React.FC<ConversationPaneProps> = ({
               title="Menu"
               className={`w-10 h-10 rounded-full flex items-center justify-center transition cursor-pointer ${
                 infoOpen
-                  ? 'text-[#00a884] bg-black/10'
-                  : 'text-[#8696a0] hover:text-current hover:bg-black/10'
+                  ? 'text-[#3b82f6] bg-black/10'
+                  : 'text-[#8fa7cc] hover:text-current hover:bg-black/10'
               }`}
             >
               <MoreVertical className="w-[19px] h-[19px]" />
@@ -575,11 +571,11 @@ export const ConversationPane: React.FC<ConversationPaneProps> = ({
           <div
             className={`px-4 py-2 border-b flex items-center gap-2.5 z-20 ${
               isLight
-                ? 'bg-white border-[#d1d7db] text-[#111b21]'
-                : 'bg-[#182229] border-[#2a3942] text-[#e9edef]'
+                ? 'bg-white border-[#cfdcf0] text-[#0a1630]'
+                : 'bg-[#0f2040] border-[#1d3764] text-[#eaf2ff]'
             }`}
           >
-            <Search className="w-4 h-4 text-[#8696a0]" />
+            <Search className="w-4 h-4 text-[#8fa7cc]" />
             <input
               autoFocus
               type="text"
@@ -593,7 +589,7 @@ export const ConversationPane: React.FC<ConversationPaneProps> = ({
                 setSearchOpen(false);
                 setChatSearchQuery('');
               }}
-              className="p-1 text-[#8696a0] hover:text-current cursor-pointer"
+              className="p-1 text-[#8fa7cc] hover:text-current cursor-pointer"
             >
               <X className="w-4 h-4" />
             </button>
@@ -606,12 +602,12 @@ export const ConversationPane: React.FC<ConversationPaneProps> = ({
             onClick={() => scrollToMessage(room.pinnedMessage!.messageId)}
             className={`px-4 py-2 border-b flex items-center justify-between gap-3 cursor-pointer z-10 ${
               isLight
-                ? 'bg-[#f8f9fa] border-[#d1d7db] text-[#111b21]'
-                : 'bg-[#182229] border-[#2a3942] text-[#e9edef]'
+                ? 'bg-[#f3f7fd] border-[#cfdcf0] text-[#0a1630]'
+                : 'bg-[#0f2040] border-[#1d3764] text-[#eaf2ff]'
             }`}
           >
             <div className="flex items-center gap-2.5 min-w-0">
-              <Pin className="w-4 h-4 text-[#00a884] shrink-0 rotate-45" />
+              <Pin className="w-4 h-4 text-[#3b82f6] shrink-0 rotate-45" />
               <p className="text-[13px] truncate">{room.pinnedMessage.text}</p>
             </div>
             <button
@@ -620,7 +616,7 @@ export const ConversationPane: React.FC<ConversationPaneProps> = ({
                 pinMessageInChat(room.id, null);
               }}
               title="Unpin"
-              className="p-1 text-[#8696a0] hover:text-current cursor-pointer"
+              className="p-1 text-[#8fa7cc] hover:text-current cursor-pointer"
             >
               <X className="w-4 h-4" />
             </button>
@@ -635,7 +631,7 @@ export const ConversationPane: React.FC<ConversationPaneProps> = ({
             const distFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
             setShowScrollDown(distFromBottom > 240);
           }}
-          style={getWallpaperStyle(activeWallpaper, theme)}
+          style={CHAT_WALLPAPER_STYLE}
           className="flex-1 overflow-y-auto py-4 space-y-0.5 relative"
         >
           {visibleMessages.map((msg, index) => {
@@ -650,8 +646,8 @@ export const ConversationPane: React.FC<ConversationPaneProps> = ({
                     <span
                       className={`px-3 py-1 rounded-[7.5px] text-[12px] shadow-xs ${
                         isLight
-                          ? 'bg-white/95 text-[#54656f]'
-                          : 'bg-[#182229]/95 text-[#8696a0]'
+                          ? 'bg-white/95 text-[#4a5f80]'
+                          : 'bg-[#0f2040]/95 text-[#8fa7cc]'
                       }`}
                     >
                       {formatDateSeparator(msg.createdAt)}
@@ -692,8 +688,8 @@ export const ConversationPane: React.FC<ConversationPaneProps> = ({
             onClick={() => bottomEndRef.current?.scrollIntoView({ behavior: 'smooth' })}
             className={`absolute right-5 bottom-20 z-20 w-10 h-10 rounded-full shadow-md border flex items-center justify-center cursor-pointer ${
               isLight
-                ? 'bg-white border-[#d1d7db] text-[#54656f]'
-                : 'bg-[#202c33] border-[#2a3942] text-[#aebac1]'
+                ? 'bg-white border-[#cfdcf0] text-[#4a5f80]'
+                : 'bg-[#12254a] border-[#1d3764] text-[#a9bddb]'
             }`}
           >
             <ArrowDown className="w-5 h-5" />
@@ -704,7 +700,7 @@ export const ConversationPane: React.FC<ConversationPaneProps> = ({
         {stagedImage && (
           <div
             className={`px-4 py-2.5 border-t flex items-center justify-between gap-3 ${
-              isLight ? 'bg-[#f0f2f5] border-[#d1d7db]' : 'bg-[#182229] border-[#2a3942]'
+              isLight ? 'bg-[#eaf1fc] border-[#cfdcf0]' : 'bg-[#0f2040] border-[#1d3764]'
             }`}
           >
             <div className="flex items-center gap-3">
@@ -713,13 +709,13 @@ export const ConversationPane: React.FC<ConversationPaneProps> = ({
                 alt="Selected"
                 className="w-12 h-12 rounded-[6px] object-cover"
               />
-              <span className="text-[13px] text-[#8696a0]">
+              <span className="text-[13px] text-[#8fa7cc]">
                 {stagedImage.width}×{stagedImage.height}
               </span>
             </div>
             <button
               onClick={() => setStagedImage(null)}
-              className="p-1.5 text-[#8696a0] hover:text-[#f15c6d] cursor-pointer"
+              className="p-1.5 text-[#8fa7cc] hover:text-[#f15c6d] cursor-pointer"
             >
               <X className="w-5 h-5" />
             </button>
@@ -730,24 +726,24 @@ export const ConversationPane: React.FC<ConversationPaneProps> = ({
         {(replyingTo || editingMsg) && (
           <div
             className={`px-4 py-2 border-t flex items-center justify-between gap-3 ${
-              isLight ? 'bg-[#f0f2f5] border-[#d1d7db]' : 'bg-[#182229] border-[#2a3942]'
+              isLight ? 'bg-[#eaf1fc] border-[#cfdcf0]' : 'bg-[#0f2040] border-[#1d3764]'
             }`}
           >
-            <div className="flex items-center gap-2.5 min-w-0 border-l-4 border-[#00a884] pl-2.5">
+            <div className="flex items-center gap-2.5 min-w-0 border-l-4 border-[#3b82f6] pl-2.5">
               {editingMsg ? (
-                <Pencil className="w-4 h-4 text-[#00a884] shrink-0" />
+                <Pencil className="w-4 h-4 text-[#3b82f6] shrink-0" />
               ) : (
-                <CornerUpLeft className="w-4 h-4 text-[#00a884] shrink-0" />
+                <CornerUpLeft className="w-4 h-4 text-[#3b82f6] shrink-0" />
               )}
               <div className="min-w-0 text-[12.5px]">
-                <p className="font-medium text-[#00a884]">
+                <p className="font-medium text-[#3b82f6]">
                   {editingMsg
                     ? 'Edit message'
                     : replyingTo?.senderId === me.uid
                       ? 'You'
                       : replyingTo?.senderName}
                 </p>
-                <p className="truncate text-[#8696a0]">
+                <p className="truncate text-[#8fa7cc]">
                   {editingMsg
                     ? editingMsg.text
                     : replyingTo
@@ -769,7 +765,7 @@ export const ConversationPane: React.FC<ConversationPaneProps> = ({
                   setInputText('');
                 }
               }}
-              className="p-1 text-[#8696a0] hover:text-current cursor-pointer"
+              className="p-1 text-[#8fa7cc] hover:text-current cursor-pointer"
             >
               <X className="w-4 h-4" />
             </button>
@@ -781,18 +777,18 @@ export const ConversationPane: React.FC<ConversationPaneProps> = ({
           <div
             className={`absolute left-3 bottom-16 z-30 w-80 rounded-[8px] border shadow-xl overflow-hidden ${
               isLight
-                ? 'bg-white border-[#d1d7db] text-[#111b21]'
-                : 'bg-[#202c33] border-[#2a3942] text-[#e9edef]'
+                ? 'bg-white border-[#cfdcf0] text-[#0a1630]'
+                : 'bg-[#12254a] border-[#1d3764] text-[#eaf2ff]'
             }`}
           >
-            <div className="p-2.5 border-b border-[#2a3942]/40 space-y-2">
+            <div className="p-2.5 border-b border-[#1d3764]/40 space-y-2">
               <input
                 type="text"
                 value={emojiSearch}
                 onChange={(e) => setEmojiSearch(e.target.value)}
                 placeholder="Search emoji"
                 className={`w-full px-3 py-1.5 rounded-[6px] text-[13px] outline-none ${
-                  isLight ? 'bg-[#f0f2f5]' : 'bg-[#111b21]'
+                  isLight ? 'bg-[#eaf1fc]' : 'bg-[#0a1630]'
                 }`}
               />
               {!emojiSearch && (
@@ -802,7 +798,7 @@ export const ConversationPane: React.FC<ConversationPaneProps> = ({
                       key={cat.id}
                       onClick={() => setEmojiCat(cat.id)}
                       className={`flex-1 py-1 rounded-[6px] text-sm cursor-pointer ${
-                        emojiCat === cat.id ? 'bg-[#00a884]/20' : 'hover:bg-black/10'
+                        emojiCat === cat.id ? 'bg-[#3b82f6]/20' : 'hover:bg-black/10'
                       }`}
                       title={cat.label}
                     >
@@ -831,15 +827,15 @@ export const ConversationPane: React.FC<ConversationPaneProps> = ({
           <div
             className={`absolute left-12 bottom-16 z-30 w-44 rounded-[8px] border shadow-xl py-1.5 text-[13.5px] ${
               isLight
-                ? 'bg-white border-[#d1d7db] text-[#3b4a54]'
-                : 'bg-[#233138] border-[#2a3942] text-[#d1d7db]'
+                ? 'bg-white border-[#cfdcf0] text-[#34476a]'
+                : 'bg-[#16294d] border-[#1d3764] text-[#cfdcf0]'
             }`}
           >
             <button
               onClick={() => imageInputRef.current?.click()}
               className="w-full px-4 py-2.5 text-left hover:bg-black/10 flex items-center gap-3 cursor-pointer"
             >
-              <ImageIcon className="w-4 h-4 text-[#00a884]" />
+              <ImageIcon className="w-4 h-4 text-[#3b82f6]" />
               <span>Photos</span>
             </button>
 
@@ -886,8 +882,8 @@ export const ConversationPane: React.FC<ConversationPaneProps> = ({
         <footer
           className={`min-h-[62px] px-3 sm:px-4 py-2.5 flex items-end gap-2 z-20 ${
             isLight
-              ? 'bg-[#f0f2f5] text-[#111b21]'
-              : 'bg-[#202c33] text-[#e9edef]'
+              ? 'bg-[#eaf1fc] text-[#0a1630]'
+              : 'bg-[#12254a] text-[#eaf2ff]'
           }`}
         >
           {recording ? (
@@ -895,7 +891,7 @@ export const ConversationPane: React.FC<ConversationPaneProps> = ({
               <button
                 onClick={() => stopVoiceRecording(true)}
                 title="Delete"
-                className="p-2 rounded-full text-[#8696a0] hover:text-[#f15c6d] cursor-pointer"
+                className="p-2 rounded-full text-[#8fa7cc] hover:text-[#f15c6d] cursor-pointer"
               >
                 <Trash2 className="w-5 h-5" />
               </button>
@@ -910,7 +906,7 @@ export const ConversationPane: React.FC<ConversationPaneProps> = ({
               <button
                 onClick={() => stopVoiceRecording(false)}
                 title="Send"
-                className="w-10 h-10 rounded-full bg-[#00a884] hover:bg-[#06cf9c] text-[#111b21] flex items-center justify-center cursor-pointer"
+                className="w-10 h-10 rounded-full bg-[#3b82f6] hover:bg-[#60a5fa] text-white flex items-center justify-center cursor-pointer"
               >
                 <Send className="w-4.5 h-4.5" />
               </button>
@@ -924,7 +920,7 @@ export const ConversationPane: React.FC<ConversationPaneProps> = ({
                 }}
                 title="Emoji"
                 className={`p-2 rounded-full transition cursor-pointer ${
-                  emojiOpen ? 'text-[#00a884]' : 'text-[#8696a0] hover:text-current'
+                  emojiOpen ? 'text-[#3b82f6]' : 'text-[#8fa7cc] hover:text-current'
                 }`}
               >
                 <Smile className="w-6 h-6" />
@@ -937,7 +933,7 @@ export const ConversationPane: React.FC<ConversationPaneProps> = ({
                 }}
                 title="Attach"
                 className={`p-2 rounded-full transition cursor-pointer ${
-                  attachOpen ? 'text-[#00a884]' : 'text-[#8696a0] hover:text-current'
+                  attachOpen ? 'text-[#3b82f6]' : 'text-[#8fa7cc] hover:text-current'
                 }`}
               >
                 <Plus className="w-6 h-6" />
@@ -945,7 +941,7 @@ export const ConversationPane: React.FC<ConversationPaneProps> = ({
 
               <div
                 className={`flex-1 rounded-[8px] px-3 py-[9px] flex items-center ${
-                  isLight ? 'bg-white' : 'bg-[#2a3942]'
+                  isLight ? 'bg-white' : 'bg-[#1d3764]'
                 }`}
               >
                 <textarea
@@ -981,7 +977,7 @@ export const ConversationPane: React.FC<ConversationPaneProps> = ({
                     }
                   }}
                   placeholder={stagedImage ? 'Add a caption' : 'Type a message'}
-                  className="w-full bg-transparent outline-none resize-none text-[15px] max-h-32 leading-5 placeholder-[#8696a0]"
+                  className="w-full bg-transparent outline-none resize-none text-[15px] max-h-32 leading-5 placeholder-[#8fa7cc]"
                 />
               </div>
 
@@ -990,7 +986,7 @@ export const ConversationPane: React.FC<ConversationPaneProps> = ({
                   onClick={handleSend}
                   disabled={sending}
                   title="Send"
-                  className="p-2 rounded-full text-[#8696a0] hover:text-[#00a884] shrink-0 transition cursor-pointer"
+                  className="p-2 rounded-full text-[#8fa7cc] hover:text-[#3b82f6] shrink-0 transition cursor-pointer"
                 >
                   <Send className="w-6 h-6" />
                 </button>
@@ -998,7 +994,7 @@ export const ConversationPane: React.FC<ConversationPaneProps> = ({
                 <button
                   onClick={startVoiceRecording}
                   title="Voice message"
-                  className="p-2 rounded-full text-[#8696a0] hover:text-current shrink-0 transition cursor-pointer"
+                  className="p-2 rounded-full text-[#8fa7cc] hover:text-current shrink-0 transition cursor-pointer"
                 >
                   <Mic className="w-6 h-6" />
                 </button>
@@ -1025,6 +1021,7 @@ export const ConversationPane: React.FC<ConversationPaneProps> = ({
           setInfoOpen(false);
           onBackMobile();
         }}
+        onToggleLock={onToggleLock}
         onToast={onToast}
       />
 
