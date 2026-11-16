@@ -30,7 +30,6 @@ import type {
   MediaPayload,
   PollData,
   PinnedMessageSummary,
-  StatusUpdate,
   TypingEntry,
 } from '../types';
 import {
@@ -862,15 +861,6 @@ export async function deleteMessageForMe(
   await set(ref(db, `messages/${chatId}/${messageId}/deletedFor/${uid}`), true);
 }
 
-export async function toggleStarMessage(
-  chatId: string,
-  messageId: string,
-  uid: string,
-  starred: boolean
-): Promise<void> {
-  await set(ref(db, `messages/${chatId}/${messageId}/starredBy/${uid}`), starred ? true : null);
-}
-
 export async function pinMessageInChat(
   chatId: string,
   summary: PinnedMessageSummary | null
@@ -975,41 +965,12 @@ export async function updateUserChatFlags(
   await update(ref(db, `userChats/${uid}/${chatId}`), flags);
 }
 
-export async function postStatusUpdate(
-  me: UserProfile,
-  payload: { type: 'text' | 'image'; text: string; bgGradient?: string; imageDataUrl?: string }
+export async function setChatLock(
+  uid: string,
+  chatId: string,
+  lockHash: string | null
 ): Promise<void> {
-  const statusRef = push(ref(db, `statuses/${me.uid}`));
-  const id = statusRef.key!;
-  const now = Date.now();
-  const item: StatusUpdate = {
-    id,
-    uid: me.uid,
-    userName: me.displayName,
-    userPhoto: me.photoURL || '',
-    type: payload.type,
-    text: payload.text.trim(),
-    ...(payload.bgGradient ? { bgGradient: payload.bgGradient } : {}),
-    ...(payload.imageDataUrl ? { imageDataUrl: payload.imageDataUrl } : {}),
-    createdAt: now,
-    expiresAt: now + 24 * 60 * 60 * 1000,
-  };
-  await set(statusRef, item);
-}
-
-export async function markStatusViewed(
-  ownerUid: string,
-  statusId: string,
-  viewerUid: string
-): Promise<void> {
-  if (ownerUid === viewerUid) return;
-  await set(ref(db, `statuses/${ownerUid}/${statusId}/viewedBy/${viewerUid}`), Date.now()).catch(
-    () => {}
-  );
-}
-
-export async function deleteMyStatus(uid: string, statusId: string): Promise<void> {
-  await remove(ref(db, `statuses/${uid}/${statusId}`));
+  await update(ref(db, `userChats/${uid}/${chatId}`), { lockHash });
 }
 
 export function subscribeChatMessages(

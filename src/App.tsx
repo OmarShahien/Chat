@@ -1,49 +1,41 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { getRedirectResult, onAuthStateChanged, signOut } from 'firebase/auth';
-import { get, onValue, ref, type Unsubscribe } from 'firebase/database';
+import { onValue, ref, type Unsubscribe } from 'firebase/database';
 import { auth, db } from './firebase';
 import type {
-  CallSession,
   ChatMessage,
   ChatRoom,
   FriendRecord,
   FriendRequest,
   PresenceState,
-  StatusUpdate,
   ThemeMode,
   TypingEntry,
   UserChatMeta,
   UserProfile,
-  WallpaperId,
 } from './types';
 import {
   bootstrapUserProfile,
   markBackgroundMessagesDelivered,
+  setChatLock,
   setOfflinePresence,
   startPresenceTracking,
   updateMyProfile,
 } from './services/chatService';
-import {
-  answerIncomingVoiceCall,
-  declineIncomingVoiceCall,
-  startOutgoingVoiceCall,
-  type ActiveRtcController,
-} from './services/callService';
+import { hashChatPasscode } from './utils/chatLock';
 import { playUiSound } from './utils/media';
 import { AuthScreen } from './components/AuthScreen';
 import { ChatListPane } from './components/ChatListPane';
 import { ConversationPane } from './components/ConversationPane';
 import { FriendsPane } from './components/FriendsPane';
 import {
-  CallOverlay,
   ForwardModal,
   ImageLightbox,
+  LockDialog,
   NewGroupModal,
+  type LockDialogMode,
 } from './components/Modals';
 import { NavRail, type SidebarTab } from './components/NavRail';
 import { SettingsPane } from './components/SettingsPane';
-import { StarredPane } from './components/StarredPane';
-import { StatusPane } from './components/StatusPane';
 
 export const App: React.FC = () => {
   const [authChecking, setAuthChecking] = useState(true);
@@ -53,7 +45,6 @@ export const App: React.FC = () => {
   const [sidebarTab, setSidebarTab] = useState<SidebarTab>('chats');
   const [activeChatId, setActiveChatId] = useState<string | null>(null);
   const [theme, setTheme] = useState<ThemeMode>('dark');
-  const [wallpaper, setWallpaper] = useState<WallpaperId>('whatsapp-doodle');
 
   const [userChats, setUserChats] = useState<Record<string, UserChatMeta>>({});
   const [chatRooms, setChatRooms] = useState<Record<string, ChatRoom>>({});
@@ -64,8 +55,10 @@ export const App: React.FC = () => {
   const [usersMap, setUsersMap] = useState<Record<string, UserProfile>>({});
   const [presenceMap, setPresenceMap] = useState<Record<string, PresenceState>>({});
   const [typingMap, setTypingMap] = useState<Record<string, Record<string, TypingEntry>>>({});
-  const [statusesByUser, setStatusesByUser] = useState<Record<string, StatusUpdate[]>>({});
-  const [cachedChatMessages, setCachedChatMessages] = useState<Record<string, ChatMessage[]>>({});
+
+  const [lockDialog, setLockDialog] = useState<{ chatId: string; mode: LockDialogMode } | null>(null);
+  // Chats the user has unlocked in this session. A chat re-locks as soon as it is closed.
+  const [unlockedChats, setUnlockedChats] = useState<Record<string, boolean>>({});
 
   const [newGroupOpen, setNewGroupOpen] = useState(false);
   const [forwardingMsg, setForwardingMsg] = useState<ChatMessage | null>(null);
@@ -77,12 +70,6 @@ export const App: React.FC = () => {
     const params = new URLSearchParams(window.location.search);
     return params.get('invite') || params.get('add');
   });
-
-  const [callSession, setCallSession] = useState<CallSession | null>(null);
-  const [isIncomingCall, setIsIncomingCall] = useState(false);
-  const [callMuted, setCallMuted] = useState(false);
-  const rtcControllerRef = useRef<ActiveRtcController | null>(null);
-  const remoteAudioElRef = useRef<HTMLAudioElement | null>(null);
 
   const prevLastMsgIdMapRef = useRef<Record<string, string>>({});
   const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -108,7 +95,6 @@ export const App: React.FC = () => {
         const profile = await bootstrapUserProfile(fbUser);
         setMe(profile);
         if (profile.theme) setTheme(profile.theme);
-        if (profile.wallpaper) setWallpaper(profile.wallpaper);
       } catch {
         setBootError('Could not load your account. Check your connection and try again.');
         await signOut(auth).catch(() => {});
@@ -208,26 +194,6 @@ export const App: React.FC = () => {
       })
     );
 
-    unsubs.push(
-      onValue(ref(db, `userCalls/${me.uid}`), async (snap) => {
-        if (!snap.exists()) return;
-        const callsObj = snap.val() as Record<string, { callId: string; createdAt: number }>;
-        const latest = Object.values(callsObj).sort(
-          (a, b) => (b.createdAt || 0) - (a.createdAt || 0)
-        )[0];
-        if (!latest || Date.now() - (latest.createdAt || 0) > 45000) return;
-
-        const callSnap = await get(ref(db, `calls/${latest.callId}`));
-        if (!callSnap.exists()) return;
-        const sess = callSnap.val() as CallSession;
-        if (sess.status === 'ringing' && !rtcControllerRef.current) {
-          setCallSession(sess);
-          setIsIncomingCall(true);
-          playUiSound('ring', me.privacy?.soundEnabled ?? true);
-        }
-      })
-    );
-
     return () => {
       unsubs.forEach((u) => u());
     };
@@ -304,33 +270,16 @@ export const App: React.FC = () => {
     return () => unsubs.forEach((u) => u());
   }, [me?.uid, relevantPeerUidsKey]);
 
-  const statusUidsKey = useMemo(() => {
-    if (!me?.uid) return '';
-    return [me.uid, ...Object.keys(friendsMap)].sort().join(',');
-  }, [me?.uid, friendsMap]);
-
+  // Re-lock every chat other than the one currently open.
   useEffect(() => {
-    if (!me?.uid || !statusUidsKey) return;
-    const uids = statusUidsKey.split(',').filter(Boolean);
-    const unsubs: Unsubscribe[] = [];
-
-    uids.forEach((u) => {
-      unsubs.push(
-        onValue(ref(db, `statuses/${u}`), (snap) => {
-          const list: StatusUpdate[] = [];
-          if (snap.exists()) {
-            snap.forEach((child) => {
-              list.push(child.val() as StatusUpdate);
-            });
-          }
-          list.sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0));
-          setStatusesByUser((prev) => ({ ...prev, [u]: list }));
-        })
-      );
+    setUnlockedChats((prev) => {
+      const keys = Object.keys(prev).filter((k) => prev[k] && k !== activeChatId);
+      if (keys.length === 0) return prev;
+      const next = { ...prev };
+      keys.forEach((k) => delete next[k]);
+      return next;
     });
-
-    return () => unsubs.forEach((u) => u());
-  }, [me?.uid, statusUidsKey]);
+  }, [activeChatId]);
 
   const unreadChatsCount = useMemo(
     () =>
@@ -343,90 +292,58 @@ export const App: React.FC = () => {
     [incomingRequests]
   );
 
-  const hasUnseenStatuses = useMemo(() => {
-    if (!me?.uid) return false;
-    const now = Date.now();
-    return Object.entries(statusesByUser).some(([uid, list]) => {
-      if (uid === me.uid) return false;
-      return list.some((s) => s.expiresAt > now && !s.viewedBy?.[me.uid]);
-    });
-  }, [statusesByUser, me?.uid]);
+  const isChatLocked = (chatId: string) =>
+    Boolean(userChats[chatId]?.lockHash) && !unlockedChats[chatId];
 
-  const starredMessages = useMemo(() => {
-    if (!me?.uid) return [];
-    const all: ChatMessage[] = [];
-    Object.values(cachedChatMessages).forEach((list) => {
-      list.forEach((m) => {
-        if (m.starredBy?.[me.uid] && !m.deletedForEveryone && !m.deletedFor?.[me.uid]) {
-          all.push(m);
-        }
-      });
-    });
-    return all.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
-  }, [cachedChatMessages, me?.uid]);
-
-  const attachRemoteStream = (stream: MediaStream) => {
-    if (remoteAudioElRef.current) {
-      remoteAudioElRef.current.srcObject = stream;
-      remoteAudioElRef.current.play().catch(() => {});
-    }
+  const chatTitleFor = (chatId: string) => {
+    const meta = userChats[chatId];
+    const room = chatRooms[chatId];
+    if (meta?.type === 'self' || room?.type === 'self') return 'your notes';
+    if (meta?.type === 'group' || room?.type === 'group') return room?.name || 'this group';
+    const peerUid = meta?.peerUid;
+    const nick = peerUid ? friendsMap[peerUid]?.nickname : undefined;
+    return nick || (peerUid ? usersMap[peerUid]?.displayName : undefined) || 'this chat';
   };
 
-  const handleStartVoiceCall = async (friend: UserProfile) => {
-    if (!me) return;
+  const openChat = (chatId: string) => {
+    if (isChatLocked(chatId)) {
+      setLockDialog({ chatId, mode: 'unlock' });
+      return;
+    }
+    setActiveChatId(chatId);
+  };
+
+  const handleToggleLock = (chatId: string) => {
+    setLockDialog({ chatId, mode: userChats[chatId]?.lockHash ? 'remove' : 'set' });
+  };
+
+  const handleLockSubmit = async (
+    mode: LockDialogMode,
+    passcode: string
+  ): Promise<string | null> => {
+    if (!me || !lockDialog) return null;
+    const { chatId } = lockDialog;
     try {
-      setIsIncomingCall(false);
-      setCallMuted(false);
-      const ctrl = await startOutgoingVoiceCall(me, friend, attachRemoteStream, (sess) => {
-        if (!sess || sess.status === 'ended' || sess.status === 'declined') {
-          rtcControllerRef.current?.hangup().catch(() => {});
-          rtcControllerRef.current = null;
-          setCallSession(null);
-          if (sess?.status === 'declined') showToast('Call declined');
+      const hash = await hashChatPasscode(passcode, me.uid, chatId);
+      if (mode === 'set') {
+        await setChatLock(me.uid, chatId, hash);
+        setUnlockedChats((prev) => ({ ...prev, [chatId]: true }));
+        showToast('Chat locked');
+      } else {
+        if (hash !== userChats[chatId]?.lockHash) return 'Wrong passcode. Try again.';
+        if (mode === 'remove') {
+          await setChatLock(me.uid, chatId, null);
+          showToast('Chat lock removed');
         } else {
-          setCallSession(sess);
+          setUnlockedChats((prev) => ({ ...prev, [chatId]: true }));
+          setActiveChatId(chatId);
         }
-      });
-      rtcControllerRef.current = ctrl;
+      }
+      setLockDialog(null);
+      return null;
     } catch {
-      showToast('Microphone access is needed for voice calls.');
+      return 'Could not update the chat lock. Please try again.';
     }
-  };
-
-  const handleAcceptIncomingCall = async () => {
-    if (!callSession) return;
-    try {
-      setIsIncomingCall(false);
-      setCallMuted(false);
-      const ctrl = await answerIncomingVoiceCall(callSession, attachRemoteStream, (sess) => {
-        if (!sess || sess.status === 'ended' || sess.status === 'declined') {
-          rtcControllerRef.current?.hangup().catch(() => {});
-          rtcControllerRef.current = null;
-          setCallSession(null);
-        } else {
-          setCallSession(sess);
-        }
-      });
-      rtcControllerRef.current = ctrl;
-    } catch {
-      showToast('Could not access microphone.');
-      handleDeclineIncomingCall();
-    }
-  };
-
-  const handleDeclineIncomingCall = async () => {
-    if (me && callSession) {
-      await declineIncomingVoiceCall(me.uid, callSession.id);
-    }
-    setCallSession(null);
-    setIsIncomingCall(false);
-  };
-
-  const handleHangupCall = async () => {
-    await rtcControllerRef.current?.hangup();
-    rtcControllerRef.current = null;
-    setCallSession(null);
-    setIsIncomingCall(false);
   };
 
   const handleSignOut = async () => {
@@ -435,6 +352,7 @@ export const App: React.FC = () => {
     }
     await signOut(auth);
     setActiveChatId(null);
+    setUnlockedChats({});
   };
 
   const handleChangeTheme = async (next: ThemeMode) => {
@@ -444,18 +362,11 @@ export const App: React.FC = () => {
     }
   };
 
-  const handleChangeWallpaper = async (next: WallpaperId) => {
-    setWallpaper(next);
-    if (me) {
-      updateMyProfile(me, { wallpaper: next }).catch(() => {});
-    }
-  };
-
   if (authChecking) {
     return (
-      <div className="h-screen w-screen bg-[#111b21] text-[#e9edef] flex flex-col items-center justify-center gap-3">
-        <div className="w-9 h-9 rounded-full border-2 border-[#00a884] border-t-transparent animate-spin" />
-        <p className="text-[13.5px] text-[#8696a0]">Chat Web</p>
+      <div className="h-screen w-screen bg-[#0a1630] text-[#eaf2ff] flex flex-col items-center justify-center gap-3">
+        <div className="w-9 h-9 rounded-full border-2 border-[#3b82f6] border-t-transparent animate-spin" />
+        <p className="text-[13.5px] text-[#8fa7cc]">Chat Web</p>
       </div>
     );
   }
@@ -469,25 +380,25 @@ export const App: React.FC = () => {
     );
   }
 
-  const activeRoom = activeChatId ? chatRooms[activeChatId] || null : null;
-  const activeMeta = activeChatId ? userChats[activeChatId] : undefined;
+  // Never show a locked chat that has not been unlocked in this session.
+  const visibleChatId =
+    activeChatId && !isChatLocked(activeChatId) ? activeChatId : null;
+  const activeRoom = visibleChatId ? chatRooms[visibleChatId] || null : null;
+  const activeMeta = visibleChatId ? userChats[visibleChatId] : undefined;
   const isLight = theme === 'light';
 
   return (
     <div
       className={`h-screen w-screen overflow-hidden flex ${
-        isLight ? 'bg-[#f0f2f5] text-[#111b21]' : 'bg-[#0b141a] text-[#e9edef]'
+        isLight ? 'bg-[#eaf1fc] text-[#0a1630]' : 'bg-[#08122a] text-[#eaf2ff]'
       }`}
     >
-      <audio ref={remoteAudioElRef} autoPlay playsInline className="hidden" />
-
-      <div className={`${activeChatId ? 'hidden md:flex' : 'flex'}`}>
+      <div className={`${visibleChatId ? 'hidden md:flex' : 'flex'}`}>
         <NavRail
           activeTab={sidebarTab}
           onSelectTab={(t) => setSidebarTab(t)}
           unreadChatsCount={unreadChatsCount}
           incomingRequestsCount={incomingRequestsCount}
-          hasUnseenStatuses={hasUnseenStatuses}
           theme={theme}
           onToggleTheme={() => handleChangeTheme(theme === 'dark' ? 'light' : 'dark')}
           me={me}
@@ -496,9 +407,9 @@ export const App: React.FC = () => {
 
       <div
         className={`${
-          activeChatId ? 'hidden md:flex' : 'flex'
+          visibleChatId ? 'hidden md:flex' : 'flex'
         } w-full md:w-[370px] lg:w-[400px] shrink-0 h-full border-r ${
-          isLight ? 'border-[#d1d7db]' : 'border-[#2a3942]'
+          isLight ? 'border-[#cfdcf0]' : 'border-[#1d3764]'
         }`}
       >
         {sidebarTab === 'chats' && (
@@ -511,8 +422,9 @@ export const App: React.FC = () => {
             friendsMap={friendsMap}
             presenceMap={presenceMap}
             typingMap={typingMap}
-            activeChatId={activeChatId}
-            onSelectChat={(cId) => setActiveChatId(cId)}
+            activeChatId={visibleChatId}
+            onSelectChat={openChat}
+            onToggleLock={handleToggleLock}
             onOpenAddFriend={() => setSidebarTab('friends')}
             onOpenNewGroup={() => setNewGroupOpen(true)}
           />
@@ -531,35 +443,10 @@ export const App: React.FC = () => {
             initialInviteCode={pendingInviteCode}
             onConsumeInviteCode={() => setPendingInviteCode(null)}
             onOpenChat={(cId) => {
-              setActiveChatId(cId);
+              openChat(cId);
               setSidebarTab('chats');
             }}
-            onStartVoiceCall={handleStartVoiceCall}
             onToast={showToast}
-          />
-        )}
-
-        {sidebarTab === 'status' && (
-          <StatusPane
-            me={me}
-            theme={theme}
-            statusesByUser={statusesByUser}
-            usersMap={usersMap}
-            onToast={showToast}
-          />
-        )}
-
-        {sidebarTab === 'starred' && (
-          <StarredPane
-            me={me}
-            theme={theme}
-            starredMessages={starredMessages}
-            chatRooms={chatRooms}
-            usersMap={usersMap}
-            onOpenChat={(cId) => {
-              setActiveChatId(cId);
-              setSidebarTab('chats');
-            }}
           />
         )}
 
@@ -567,35 +454,29 @@ export const App: React.FC = () => {
           <SettingsPane
             me={me}
             theme={theme}
-            wallpaper={wallpaper}
             onProfileUpdated={(u) => setMe(u)}
             onChangeTheme={handleChangeTheme}
-            onChangeWallpaper={handleChangeWallpaper}
             onSignOut={handleSignOut}
             onToast={showToast}
           />
         )}
       </div>
 
-      <div className={`${activeChatId ? 'flex' : 'hidden md:flex'} flex-1 h-full min-w-0`}>
+      <div className={`${visibleChatId ? 'flex' : 'hidden md:flex'} flex-1 h-full min-w-0`}>
         <ConversationPane
           me={me}
-          theme={theme}
-          defaultWallpaper={wallpaper}
+          theme="dark"
           room={activeRoom}
           meta={activeMeta}
           usersMap={usersMap}
           friendsMap={friendsMap}
           presenceMap={presenceMap}
-          typingEntries={(activeChatId && typingMap[activeChatId]) || {}}
+          typingEntries={(visibleChatId && typingMap[visibleChatId]) || {}}
           blocksMap={blocksMap}
           onBackMobile={() => setActiveChatId(null)}
+          onToggleLock={handleToggleLock}
           onForwardMessage={(m) => setForwardingMsg(m)}
           onOpenLightbox={(src, caption) => setLightbox({ src, caption })}
-          onStartVoiceCall={handleStartVoiceCall}
-          onMessagesSnapshot={(cId, msgs) =>
-            setCachedChatMessages((prev) => ({ ...prev, [cId]: msgs }))
-          }
           onToast={showToast}
         />
       </div>
@@ -611,6 +492,13 @@ export const App: React.FC = () => {
           setSidebarTab('chats');
         }}
         onToast={showToast}
+      />
+
+      <LockDialog
+        mode={lockDialog?.mode ?? null}
+        chatTitle={lockDialog ? chatTitleFor(lockDialog.chatId) : ''}
+        onClose={() => setLockDialog(null)}
+        onSubmit={handleLockSubmit}
       />
 
       <ForwardModal
@@ -629,23 +517,8 @@ export const App: React.FC = () => {
         onClose={() => setLightbox(null)}
       />
 
-      <CallOverlay
-        session={callSession}
-        isIncomingRinging={isIncomingCall}
-        muted={callMuted}
-        onAccept={handleAcceptIncomingCall}
-        onDecline={handleDeclineIncomingCall}
-        onHangup={handleHangupCall}
-        onToggleMute={() => {
-          const next = !callMuted;
-          setCallMuted(next);
-          rtcControllerRef.current?.toggleMute(next);
-        }}
-        meUid={me.uid}
-      />
-
       {toastMsg && (
-        <div className="fixed bottom-18 md:bottom-5 left-1/2 -translate-x-1/2 z-50 px-4 py-2 rounded-[6px] bg-[#202c33] border border-[#2a3942] text-[#e9edef] text-[13px] shadow-xl">
+        <div className="fixed bottom-18 md:bottom-5 left-1/2 -translate-x-1/2 z-50 px-4 py-2 rounded-[6px] bg-[#12254a] border border-[#1d3764] text-[#eaf2ff] text-[13px] shadow-xl">
           {toastMsg}
         </div>
       )}

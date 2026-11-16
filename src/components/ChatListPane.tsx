@@ -4,6 +4,8 @@ import {
   BellOff,
   CheckCheck,
   Heart,
+  Lock,
+  LockOpen,
   MoreVertical,
   Pin,
   Search,
@@ -37,6 +39,7 @@ interface ChatListPaneProps {
   onSelectChat: (chatId: string) => void;
   onOpenAddFriend: () => void;
   onOpenNewGroup: () => void;
+  onToggleLock: (chatId: string) => void;
 }
 
 type ChatFilter = 'all' | 'unread' | 'favorites' | 'groups' | 'archived';
@@ -54,6 +57,7 @@ export const ChatListPane: React.FC<ChatListPaneProps> = ({
   onSelectChat,
   onOpenAddFriend,
   onOpenNewGroup,
+  onToggleLock,
 }) => {
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState<ChatFilter>('all');
@@ -131,7 +135,9 @@ export const ChatListPane: React.FC<ChatListPaneProps> = ({
         if (search.trim()) {
           const q = search.trim().toLowerCase();
           const matchTitle = item.title.toLowerCase().includes(q);
-          const matchLast = (item.meta.lastMessageText || '').toLowerCase().includes(q);
+          const matchLast =
+            !item.meta.lockHash &&
+            (item.meta.lastMessageText || '').toLowerCase().includes(q);
           const matchUsername = (item.peerUser?.username || '').toLowerCase().includes(q);
           return matchTitle || matchLast || matchUsername;
         }
@@ -159,7 +165,7 @@ export const ChatListPane: React.FC<ChatListPaneProps> = ({
   return (
     <div
       className={`flex flex-col h-full w-full select-none ${
-        isLight ? 'bg-white text-[#111b21]' : 'bg-[#111b21] text-[#e9edef]'
+        isLight ? 'bg-white text-[#0a1630]' : 'bg-[#0a1630] text-[#eaf2ff]'
       }`}
     >
       {/* Header */}
@@ -171,8 +177,8 @@ export const ChatListPane: React.FC<ChatListPaneProps> = ({
             title="Add contact"
             className={`w-10 h-10 rounded-full flex items-center justify-center transition cursor-pointer ${
               isLight
-                ? 'hover:bg-[#f0f2f5] text-[#54656f]'
-                : 'hover:bg-[#202c33] text-[#aebac1]'
+                ? 'hover:bg-[#eaf1fc] text-[#4a5f80]'
+                : 'hover:bg-[#12254a] text-[#a9bddb]'
             }`}
           >
             <UserPlus className="w-[20px] h-[20px]" />
@@ -183,8 +189,8 @@ export const ChatListPane: React.FC<ChatListPaneProps> = ({
             title="New group"
             className={`w-10 h-10 rounded-full flex items-center justify-center transition cursor-pointer ${
               isLight
-                ? 'hover:bg-[#f0f2f5] text-[#54656f]'
-                : 'hover:bg-[#202c33] text-[#aebac1]'
+                ? 'hover:bg-[#eaf1fc] text-[#4a5f80]'
+                : 'hover:bg-[#12254a] text-[#a9bddb]'
             }`}
           >
             <Users className="w-[20px] h-[20px]" />
@@ -196,19 +202,19 @@ export const ChatListPane: React.FC<ChatListPaneProps> = ({
       <div className="px-3 pb-2">
         <div
           className={`flex items-center gap-3 px-3 h-[35px] rounded-[8px] text-[14px] ${
-            isLight ? 'bg-[#f0f2f5] text-[#111b21]' : 'bg-[#202c33] text-[#e9edef]'
+            isLight ? 'bg-[#eaf1fc] text-[#0a1630]' : 'bg-[#12254a] text-[#eaf2ff]'
           }`}
         >
-          <Search className="w-4 h-4 text-[#8696a0] shrink-0" />
+          <Search className="w-4 h-4 text-[#8fa7cc] shrink-0" />
           <input
             type="text"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search"
-            className="w-full bg-transparent outline-none placeholder-[#8696a0] text-[14px]"
+            className="w-full bg-transparent outline-none placeholder-[#8fa7cc] text-[14px]"
           />
           {search && (
-            <button onClick={() => setSearch('')} className="text-[#8696a0] hover:text-current cursor-pointer">
+            <button onClick={() => setSearch('')} className="text-[#8fa7cc] hover:text-current cursor-pointer">
               <X className="w-4 h-4" />
             </button>
           )}
@@ -226,11 +232,11 @@ export const ChatListPane: React.FC<ChatListPaneProps> = ({
               className={`px-3 py-1 rounded-full text-[13px] whitespace-nowrap transition cursor-pointer ${
                 active
                   ? isLight
-                    ? 'bg-[#e7fce3] text-[#008069] font-medium'
-                    : 'bg-[#0a332c] text-[#00a884] font-medium'
+                    ? 'bg-[#dbeafe] text-[#1d4ed8] font-medium'
+                    : 'bg-[#14336b] text-[#3b82f6] font-medium'
                   : isLight
-                    ? 'bg-[#f0f2f5] text-[#54656f] hover:bg-[#e9edef]'
-                    : 'bg-[#202c33] text-[#8696a0] hover:bg-[#2a3942]'
+                    ? 'bg-[#eaf1fc] text-[#4a5f80] hover:bg-[#dde8f8]'
+                    : 'bg-[#12254a] text-[#8fa7cc] hover:bg-[#1d3764]'
               }`}
             >
               {f.label}
@@ -243,13 +249,13 @@ export const ChatListPane: React.FC<ChatListPaneProps> = ({
       <div className="flex-1 overflow-y-auto pb-16 md:pb-0">
         {items.length === 0 ? (
           <div className="px-6 py-14 text-center space-y-3">
-            <p className="text-[14px] text-[#8696a0]">
+            <p className="text-[14px] text-[#8fa7cc]">
               {search ? 'No chats found' : 'No chats yet'}
             </p>
             {!search && (
               <button
                 onClick={onOpenAddFriend}
-                className="text-[14px] text-[#00a884] hover:underline font-medium cursor-pointer"
+                className="text-[14px] text-[#3b82f6] hover:underline font-medium cursor-pointer"
               >
                 Add a friend to start chatting
               </button>
@@ -269,11 +275,11 @@ export const ChatListPane: React.FC<ChatListPaneProps> = ({
                 className={`group relative pl-3 pr-0 flex items-center gap-3 cursor-pointer transition ${
                   selected
                     ? isLight
-                      ? 'bg-[#f0f2f5]'
-                      : 'bg-[#2a3942]'
+                      ? 'bg-[#eaf1fc]'
+                      : 'bg-[#1d3764]'
                     : isLight
-                      ? 'hover:bg-[#f5f6f6]'
-                      : 'hover:bg-[#202c33]'
+                      ? 'hover:bg-[#f1f6fd]'
+                      : 'hover:bg-[#12254a]'
                 }`}
               >
                 <Avatar
@@ -290,15 +296,15 @@ export const ChatListPane: React.FC<ChatListPaneProps> = ({
                     selected
                       ? 'border-transparent'
                       : isLight
-                        ? 'border-[#e9edef]'
-                        : 'border-[#222d34]'
+                        ? 'border-[#dde8f8]'
+                        : 'border-[#17294d]'
                   }`}
                 >
                   <div className="flex items-center justify-between gap-2">
                     <span className="text-[16px] font-normal truncate">{item.title}</span>
                     <span
                       className={`text-[12px] shrink-0 ${
-                        unread > 0 ? 'text-[#00a884] font-medium' : 'text-[#8696a0]'
+                        unread > 0 ? 'text-[#3b82f6] font-medium' : 'text-[#8fa7cc]'
                       }`}
                     >
                       {formatChatListTime(item.meta.lastMessageAt)}
@@ -307,8 +313,13 @@ export const ChatListPane: React.FC<ChatListPaneProps> = ({
 
                   <div className="flex items-center justify-between gap-2 mt-0.5">
                     <div className="text-[13.5px] truncate flex items-center gap-1 min-w-0">
-                      {typer ? (
-                        <span className="text-[#00a884]">
+                      {item.meta.lockHash ? (
+                        <span className="text-[#8fa7cc] truncate flex items-center gap-1">
+                          <Lock className="w-3.5 h-3.5 shrink-0" />
+                          Locked chat
+                        </span>
+                      ) : typer ? (
+                        <span className="text-[#3b82f6]">
                           {item.meta.type === 'group' ? `${typer.name}: ` : ''}
                           {typer.state === 'recording' ? 'recording audio...' : 'typing...'}
                         </span>
@@ -317,7 +328,7 @@ export const ChatListPane: React.FC<ChatListPaneProps> = ({
                           {isOutgoingLast && item.meta.lastMessageType !== 'system' && (
                             <CheckCheck className="w-4 h-4 shrink-0 text-[#53bdeb]" />
                           )}
-                          <span className="text-[#8696a0] truncate">
+                          <span className="text-[#8fa7cc] truncate">
                             {item.meta.lastMessageText || ''}
                           </span>
                         </>
@@ -326,12 +337,12 @@ export const ChatListPane: React.FC<ChatListPaneProps> = ({
 
                     <div className="flex items-center gap-1.5 shrink-0">
                       {item.meta.favorite && (
-                        <Heart className="w-3.5 h-3.5 text-[#8696a0] fill-[#8696a0]" />
+                        <Heart className="w-3.5 h-3.5 text-[#8fa7cc] fill-[#8fa7cc]" />
                       )}
-                      {item.meta.muted && <BellOff className="w-3.5 h-3.5 text-[#8696a0]" />}
-                      {item.meta.pinned && <Pin className="w-3.5 h-3.5 text-[#8696a0] rotate-45" />}
+                      {item.meta.muted && <BellOff className="w-3.5 h-3.5 text-[#8fa7cc]" />}
+                      {item.meta.pinned && <Pin className="w-3.5 h-3.5 text-[#8fa7cc] rotate-45" />}
                       {unread > 0 && (
-                        <span className="min-w-[20px] h-5 px-1.5 rounded-full bg-[#00a884] text-[#111b21] text-[11.5px] font-semibold flex items-center justify-center">
+                        <span className="min-w-[20px] h-5 px-1.5 rounded-full bg-[#3b82f6] text-white text-[11.5px] font-semibold flex items-center justify-center">
                           {unread > 99 ? '99+' : unread}
                         </span>
                       )}
@@ -341,7 +352,7 @@ export const ChatListPane: React.FC<ChatListPaneProps> = ({
                           e.stopPropagation();
                           setMenuChatId(menuChatId === item.meta.chatId ? null : item.meta.chatId);
                         }}
-                        className="opacity-0 group-hover:opacity-100 p-0.5 rounded text-[#8696a0] hover:text-current transition cursor-pointer"
+                        className="opacity-0 group-hover:opacity-100 p-0.5 rounded text-[#8fa7cc] hover:text-current transition cursor-pointer"
                       >
                         <MoreVertical className="w-4 h-4" />
                       </button>
@@ -353,12 +364,22 @@ export const ChatListPane: React.FC<ChatListPaneProps> = ({
                   <div
                     onClick={(e) => e.stopPropagation()}
                     onMouseLeave={() => setMenuChatId(null)}
-                    className={`absolute right-3 top-12 z-30 w-44 rounded-[6px] border shadow-lg py-1.5 text-[13.5px] ${
+                    className={`absolute right-3 top-12 z-30 w-48 rounded-[6px] border shadow-lg py-1.5 text-[13.5px] ${
                       isLight
-                        ? 'bg-white border-[#d1d7db] text-[#3b4a54]'
-                        : 'bg-[#233138] border-[#2a3942] text-[#d1d7db]'
+                        ? 'bg-white border-[#cfdcf0] text-[#34476a]'
+                        : 'bg-[#16294d] border-[#1d3764] text-[#cfdcf0]'
                     }`}
                   >
+                    <button
+                      onClick={() => {
+                        onToggleLock(item.meta.chatId);
+                        setMenuChatId(null);
+                      }}
+                      className="w-full px-4 py-2 text-left hover:bg-black/10 flex items-center gap-2.5 cursor-pointer"
+                    >
+                      {item.meta.lockHash ? <LockOpen className="w-4 h-4" /> : <Lock className="w-4 h-4" />}
+                      {item.meta.lockHash ? 'Remove lock' : 'Lock chat'}
+                    </button>
                     <button
                       onClick={() => {
                         updateUserChatFlags(me.uid, item.meta.chatId, {

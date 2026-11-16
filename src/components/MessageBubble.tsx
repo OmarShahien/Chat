@@ -15,7 +15,6 @@ import {
   Pin,
   Play,
   SmilePlus,
-  Star,
   Trash2,
 } from 'lucide-react';
 import type { ChatMessage, ChatRoom, ThemeMode, UserProfile } from '../types';
@@ -26,7 +25,6 @@ import {
   getMessageSummaryText,
   pinMessageInChat,
   toggleMessageReaction,
-  toggleStarMessage,
   voteOnPollOption,
 } from '../services/chatService';
 import { QUICK_REACTIONS } from '../utils/emojis';
@@ -59,7 +57,7 @@ function renderLinkifiedText(text: string): React.ReactNode {
           target="_blank"
           rel="noreferrer"
           onClick={(e) => e.stopPropagation()}
-          className="text-[#53bdeb] underline break-all hover:opacity-90"
+          className="text-[#b8f0ff] underline break-all hover:opacity-90"
         >
           {part}
         </a>
@@ -95,7 +93,6 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
 
   const isLight = theme === 'light';
   const isMine = message.senderId === me.uid;
-  const isStarred = Boolean(message.starredBy?.[me.uid]);
 
   useEffect(() => {
     let active = true;
@@ -121,8 +118,8 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
         <div
           className={`px-3 py-1 rounded-[7.5px] text-[12px] text-center max-w-md shadow-xs ${
             isLight
-              ? 'bg-white/90 text-[#54656f]'
-              : 'bg-[#182229] text-[#8696a0]'
+              ? 'bg-white/90 text-[#4a5f80]'
+              : 'bg-[#0f2040] text-[#8fa7cc]'
           }`}
         >
           {message.text}
@@ -190,13 +187,10 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
     }
   };
 
+  // One fixed bubble style shared by every user (independent of the light/dark theme).
   const bubbleBg = isMine
-    ? isLight
-      ? 'bg-[#d9fdd3] text-[#111b21]'
-      : 'bg-[#005c4b] text-[#e9edef]'
-    : isLight
-      ? 'bg-white text-[#111b21]'
-      : 'bg-[#202c33] text-[#e9edef]';
+    ? 'bg-[#2f6fe4] text-white'
+    : 'bg-[#1c3a66] text-[#eaf2ff]';
 
   const waveform = message.mediaMeta?.waveform || [
     28, 52, 40, 74, 90, 56, 38, 68, 85, 48, 62, 78, 44, 34, 65, 82, 50, 42, 60, 35,
@@ -208,7 +202,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
       className={`group relative flex w-full px-3 sm:px-[7%] ${
         isMine ? 'justify-end' : 'justify-start'
       } ${hasReactions ? 'mb-4' : 'mb-0.5'} transition-colors duration-500 ${
-        highlighted ? 'bg-[#00a884]/20 py-1' : ''
+        highlighted ? 'bg-[#8fd0ff]/20 py-1' : ''
       }`}
       onMouseLeave={() => {
         setShowReactions(false);
@@ -216,12 +210,12 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
       }}
     >
       <div
-        className={`relative max-w-[85%] sm:max-w-[65%] min-w-[96px] rounded-[7.5px] px-2.5 pt-1.5 pb-1 shadow-[0_1px_0.5px_rgba(11,20,26,0.13)] ${bubbleBg} ${
-          isMine ? 'rounded-tr-none' : 'rounded-tl-none'
+        className={`relative max-w-[85%] sm:max-w-[65%] min-w-[96px] rounded-[16px] px-3 pt-1.5 pb-1 shadow-[0_1px_2px_rgba(4,12,30,0.35)] ${bubbleBg} ${
+          isMine ? 'rounded-br-[4px]' : 'rounded-bl-[4px]'
         }`}
       >
         {!isMine && room.type === 'group' && (
-          <p className="text-[12.5px] font-medium text-[#00a884] mb-0.5 truncate">
+          <p className="text-[12.5px] font-medium text-[#8fd0ff] mb-0.5 truncate">
             {usersMap[message.senderId]?.displayName || message.senderName}
           </p>
         )}
@@ -236,11 +230,11 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
         {message.replyTo && !message.deletedForEveryone && (
           <div
             onClick={() => onScrollToMessage(message.replyTo!.messageId)}
-            className={`mb-1.5 rounded-[5px] px-2.5 py-1.5 border-l-4 border-[#00a884] cursor-pointer text-[12.5px] ${
+            className={`mb-1.5 rounded-[5px] px-2.5 py-1.5 border-l-4 border-[#8fd0ff] cursor-pointer text-[12.5px] ${
               isLight ? 'bg-black/5' : 'bg-black/20'
             }`}
           >
-            <p className="font-medium text-[#00a884] truncate">
+            <p className="font-medium text-[#8fd0ff] truncate">
               {message.replyTo.senderId === me.uid ? 'You' : message.replyTo.senderName}
             </p>
             <p className="opacity-80 truncate">{message.replyTo.text || message.replyTo.type}</p>
@@ -280,7 +274,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
                 <button
                   onClick={toggleVoicePlay}
                   disabled={!mediaUrl}
-                  className="w-9 h-9 rounded-full bg-[#00a884] text-[#111b21] flex items-center justify-center shrink-0 hover:bg-[#06cf9c] disabled:opacity-40 cursor-pointer"
+                  className="w-9 h-9 rounded-full bg-white text-[#1c3a66] flex items-center justify-center shrink-0 hover:bg-[#dbeafe] disabled:opacity-40 cursor-pointer"
                 >
                   {playing ? (
                     <Pause className="w-4 h-4 fill-current" />
@@ -301,7 +295,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
                             active
                               ? 'bg-[#53bdeb]'
                               : isLight
-                                ? 'bg-[#8696a0]/50'
+                                ? 'bg-[#8fa7cc]/50'
                                 : 'bg-white/30'
                           }`}
                           style={{ height: `${Math.max(18, bar)}%` }}
@@ -333,7 +327,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
                 }`}
               >
                 <div className="flex items-center gap-2.5 min-w-0">
-                  <FileText className="w-5 h-5 text-[#00a884] shrink-0" />
+                  <FileText className="w-5 h-5 text-[#8fd0ff] shrink-0" />
                   <div className="min-w-0">
                     <p className="text-[13px] font-medium truncate">
                       {message.mediaMeta?.fileName || 'Document'}
@@ -348,7 +342,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
                   <a
                     href={mediaUrl}
                     download={message.mediaMeta?.fileName || 'file'}
-                    className="p-1.5 rounded hover:bg-black/15 text-[#00a884]"
+                    className="p-1.5 rounded hover:bg-black/15 text-[#8fd0ff]"
                     title="Download"
                   >
                     <Download className="w-4 h-4" />
@@ -360,7 +354,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
             {message.type === 'poll' && message.poll && (
               <div className="space-y-2 py-1 min-w-[230px] sm:min-w-[270px]">
                 <div className="flex items-start gap-2">
-                  <BarChart2 className="w-4 h-4 text-[#00a884] shrink-0 mt-0.5" />
+                  <BarChart2 className="w-4 h-4 text-[#8fd0ff] shrink-0 mt-0.5" />
                   <div>
                     <p className="text-[14.5px] font-medium">{message.poll.question}</p>
                     <p className="text-[11.5px] opacity-70">
@@ -386,7 +380,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
                         onClick={() => voteOnPollOption(message.chatId, message, me.uid, opt.id)}
                         className={`w-full text-left rounded-[6px] p-2 transition border cursor-pointer ${
                           votedByMe
-                            ? 'border-[#00a884] bg-[#00a884]/15'
+                            ? 'border-[#8fd0ff] bg-[#8fd0ff]/15'
                             : isLight
                               ? 'border-black/10 bg-black/5 hover:bg-black/10'
                               : 'border-white/10 bg-black/20 hover:bg-black/30'
@@ -397,7 +391,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
                             <span
                               className={`w-3.5 h-3.5 rounded-full border flex items-center justify-center ${
                                 votedByMe
-                                  ? 'border-[#00a884] bg-[#00a884] text-[#111b21]'
+                                  ? 'border-[#8fd0ff] bg-[#8fd0ff] text-[#0a1630]'
                                   : 'border-current opacity-60'
                               }`}
                             >
@@ -409,7 +403,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
                         </div>
                         <div className="h-1.5 rounded-full bg-black/20 overflow-hidden">
                           <div
-                            className="h-full bg-[#00a884] transition-all duration-300"
+                            className="h-full bg-[#8fd0ff] transition-all duration-300"
                             style={{ width: `${pct}%` }}
                           />
                         </div>
@@ -429,13 +423,12 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
         )}
 
         <div className="flex items-center justify-end gap-1 mt-0.5 text-[11px] opacity-65 select-none">
-          {isStarred && <Star className="w-3 h-3 fill-current" />}
           {message.editedAt && !message.deletedForEveryone && <span>Edited</span>}
           <span>{formatMessageTime(message.createdAt)}</span>
           {isMine && !message.deletedForEveryone && (
             <span>
               {receiptStatus === 'seen' ? (
-                <CheckCheck className="w-4 h-4 text-[#53bdeb]" />
+                <CheckCheck className="w-4 h-4 text-[#b8f0ff]" />
               ) : receiptStatus === 'delivered' ? (
                 <CheckCheck className="w-4 h-4" />
               ) : (
@@ -451,8 +444,8 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
               isMine ? 'right-2' : 'left-2'
             } flex items-center gap-1 px-2 py-0.5 rounded-full border shadow-sm text-xs z-10 ${
               isLight
-                ? 'bg-white border-[#d1d7db] text-[#111b21]'
-                : 'bg-[#202c33] border-[#2a3942] text-[#e9edef]'
+                ? 'bg-white border-[#cfdcf0] text-[#0a1630]'
+                : 'bg-[#12254a] border-[#1d3764] text-[#eaf2ff]'
             }`}
           >
             {Object.entries(reactionGroups).map(([emoji, uids]) => {
@@ -469,7 +462,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
                     )
                   }
                   className={`inline-flex items-center gap-0.5 px-0.5 rounded cursor-pointer ${
-                    mine ? 'bg-[#00a884]/20' : ''
+                    mine ? 'bg-[#8fd0ff]/20' : ''
                   }`}
                 >
                   <span>{emoji}</span>
@@ -486,8 +479,8 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
               isMine ? '-left-23' : '-right-23'
             } flex items-center gap-0.5 px-1.5 py-0.5 rounded-full shadow-md border z-20 ${
               isLight
-                ? 'bg-white border-[#d1d7db] text-[#54656f]'
-                : 'bg-[#233138] border-[#2a3942] text-[#aebac1]'
+                ? 'bg-white border-[#cfdcf0] text-[#4a5f80]'
+                : 'bg-[#16294d] border-[#1d3764] text-[#a9bddb]'
             }`}
           >
             <button
@@ -496,14 +489,14 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
                 setShowMenu(false);
               }}
               title="React"
-              className="p-1 rounded-full hover:text-[#00a884] cursor-pointer"
+              className="p-1 rounded-full hover:text-[#8fd0ff] cursor-pointer"
             >
               <SmilePlus className="w-3.5 h-3.5" />
             </button>
             <button
               onClick={() => onReply(message)}
               title="Reply"
-              className="p-1 rounded-full hover:text-[#00a884] cursor-pointer"
+              className="p-1 rounded-full hover:text-[#8fd0ff] cursor-pointer"
             >
               <CornerUpLeft className="w-3.5 h-3.5" />
             </button>
@@ -513,7 +506,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
                 setShowReactions(false);
               }}
               title="More"
-              className="p-1 rounded-full hover:text-[#00a884] cursor-pointer"
+              className="p-1 rounded-full hover:text-[#8fd0ff] cursor-pointer"
             >
               <MoreHorizontal className="w-3.5 h-3.5" />
             </button>
@@ -525,7 +518,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
             className={`absolute -top-11 ${
               isMine ? 'right-0' : 'left-0'
             } z-30 flex items-center gap-1 px-2.5 py-1.5 rounded-full shadow-xl border ${
-              isLight ? 'bg-white border-[#d1d7db]' : 'bg-[#233138] border-[#2a3942]'
+              isLight ? 'bg-white border-[#cfdcf0]' : 'bg-[#16294d] border-[#1d3764]'
             }`}
           >
             {QUICK_REACTIONS.map((emoji) => {
@@ -543,7 +536,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
                     setShowReactions(false);
                   }}
                   className={`text-lg hover:scale-125 transition px-0.5 rounded cursor-pointer ${
-                    currentMine ? 'bg-[#00a884]/25' : ''
+                    currentMine ? 'bg-[#8fd0ff]/25' : ''
                   }`}
                 >
                   {emoji}
@@ -559,8 +552,8 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
               isMine ? 'right-0' : 'left-0'
             } z-30 w-44 rounded-[6px] shadow-xl border py-1.5 text-[13px] ${
               isLight
-                ? 'bg-white border-[#d1d7db] text-[#3b4a54]'
-                : 'bg-[#233138] border-[#2a3942] text-[#d1d7db]'
+                ? 'bg-white border-[#cfdcf0] text-[#34476a]'
+                : 'bg-[#16294d] border-[#1d3764] text-[#cfdcf0]'
             }`}
           >
             <button
@@ -598,17 +591,6 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
                 Copy
               </button>
             )}
-
-            <button
-              onClick={() => {
-                toggleStarMessage(message.chatId, message.id, me.uid, !isStarred);
-                setShowMenu(false);
-              }}
-              className="w-full px-4 py-2 text-left hover:bg-black/10 flex items-center gap-2.5 cursor-pointer"
-            >
-              <Star className="w-4 h-4" />
-              {isStarred ? 'Unstar' : 'Star'}
-            </button>
 
             <button
               onClick={() => {

@@ -3,16 +3,12 @@ import {
   Camera,
   Check,
   Download,
-  Mic,
-  MicOff,
-  Phone,
-  PhoneOff,
+  Lock,
   Plus,
   Trash2,
   X,
 } from 'lucide-react';
 import type {
-  CallSession,
   ChatMessage,
   ChatRoom,
   FriendRecord,
@@ -21,7 +17,6 @@ import type {
   UserProfile,
 } from '../types';
 import { compressAvatarFile } from '../utils/media';
-import { formatDuration } from '../utils/formatters';
 import {
   createGroupChat,
   fetchMediaPayload,
@@ -85,10 +80,10 @@ export const NewGroupModal: React.FC<NewGroupModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 bg-black/65 flex items-center justify-center p-4">
-      <div className="w-full max-w-md rounded-[8px] bg-[#111b21] border border-[#2a3942] text-[#e9edef] shadow-2xl overflow-hidden">
-        <div className="px-5 py-3.5 bg-[#202c33] border-b border-[#2a3942] flex items-center justify-between">
+      <div className="w-full max-w-md rounded-[8px] bg-[#0a1630] border border-[#1d3764] text-[#eaf2ff] shadow-2xl overflow-hidden">
+        <div className="px-5 py-3.5 bg-[#12254a] border-b border-[#1d3764] flex items-center justify-between">
           <h2 className="font-medium text-[16px]">New group</h2>
-          <button onClick={onClose} className="p-1 text-[#8696a0] hover:text-white cursor-pointer">
+          <button onClick={onClose} className="p-1 text-[#8fa7cc] hover:text-white cursor-pointer">
             <X className="w-5 h-5" />
           </button>
         </div>
@@ -101,7 +96,7 @@ export const NewGroupModal: React.FC<NewGroupModalProps> = ({
               title="Group icon"
             >
               <Avatar name={name || 'Group'} src={photo} size="lg" isGroup />
-              <span className="absolute -bottom-1 -right-1 p-1.5 rounded-full bg-[#00a884] text-[#111b21]">
+              <span className="absolute -bottom-1 -right-1 p-1.5 rounded-full bg-[#3b82f6] text-white">
                 <Camera className="w-3 h-3" />
               </span>
               <input
@@ -125,7 +120,7 @@ export const NewGroupModal: React.FC<NewGroupModalProps> = ({
                 onChange={(e) => setName(e.target.value)}
                 placeholder="Group subject"
                 maxLength={48}
-                className="w-full px-3 py-2 rounded-[6px] bg-[#202c33] text-[14px] outline-none"
+                className="w-full px-3 py-2 rounded-[6px] bg-[#12254a] text-[14px] outline-none"
               />
               <input
                 type="text"
@@ -133,18 +128,18 @@ export const NewGroupModal: React.FC<NewGroupModalProps> = ({
                 onChange={(e) => setDesc(e.target.value)}
                 placeholder="Description (optional)"
                 maxLength={100}
-                className="w-full px-3 py-1.5 rounded-[6px] bg-[#202c33] text-[13px] outline-none"
+                className="w-full px-3 py-1.5 rounded-[6px] bg-[#12254a] text-[13px] outline-none"
               />
             </div>
           </div>
 
           <div className="space-y-1.5">
-            <p className="text-[13px] text-[#8696a0]">
+            <p className="text-[13px] text-[#8fa7cc]">
               Add contacts ({Object.values(selected).filter(Boolean).length})
             </p>
             <div className="max-h-48 overflow-y-auto space-y-1 pr-1">
               {friends.length === 0 ? (
-                <p className="text-[13px] text-[#8696a0] py-3">
+                <p className="text-[13px] text-[#8fa7cc] py-3">
                   No contacts yet. You can add members later.
                 </p>
               ) : (
@@ -154,20 +149,20 @@ export const NewGroupModal: React.FC<NewGroupModalProps> = ({
                   return (
                     <label
                       key={rec.uid}
-                      className="flex items-center justify-between p-2 rounded-[6px] hover:bg-[#202c33] cursor-pointer"
+                      className="flex items-center justify-between p-2 rounded-[6px] hover:bg-[#12254a] cursor-pointer"
                     >
                       <div className="flex items-center gap-2.5">
                         <Avatar name={u?.displayName || 'Contact'} src={u?.photoURL} size="sm" />
                         <div>
                           <p className="text-[14px]">{u?.displayName || 'Contact'}</p>
-                          <p className="text-[12px] text-[#8696a0]">@{u?.username}</p>
+                          <p className="text-[12px] text-[#8fa7cc]">@{u?.username}</p>
                         </div>
                       </div>
                       <input
                         type="checkbox"
                         checked={isChecked}
                         onChange={() => setSelected({ ...selected, [rec.uid]: !isChecked })}
-                        className="accent-[#00a884] w-4 h-4"
+                        className="accent-[#3b82f6] w-4 h-4"
                       />
                     </label>
                   );
@@ -179,7 +174,7 @@ export const NewGroupModal: React.FC<NewGroupModalProps> = ({
           <button
             type="submit"
             disabled={creating || !name.trim()}
-            className="w-full py-2 rounded-[6px] bg-[#00a884] hover:bg-[#06cf9c] disabled:opacity-50 text-[#111b21] font-medium text-[14px] cursor-pointer"
+            className="w-full py-2 rounded-[6px] bg-[#3b82f6] hover:bg-[#60a5fa] disabled:opacity-50 text-white font-medium text-[14px] cursor-pointer"
           >
             {creating ? 'Creating...' : 'Create'}
           </button>
@@ -228,29 +223,29 @@ export const PollModal: React.FC<PollModalProps> = ({ open, onClose, onSubmitPol
 
   return (
     <div className="fixed inset-0 z-50 bg-black/65 flex items-center justify-center p-4">
-      <div className="w-full max-w-md rounded-[8px] bg-[#111b21] border border-[#2a3942] text-[#e9edef] shadow-2xl overflow-hidden">
-        <div className="px-5 py-3.5 bg-[#202c33] border-b border-[#2a3942] flex items-center justify-between">
+      <div className="w-full max-w-md rounded-[8px] bg-[#0a1630] border border-[#1d3764] text-[#eaf2ff] shadow-2xl overflow-hidden">
+        <div className="px-5 py-3.5 bg-[#12254a] border-b border-[#1d3764] flex items-center justify-between">
           <h2 className="font-medium text-[16px]">Create poll</h2>
-          <button onClick={onClose} className="p-1 text-[#8696a0] hover:text-white cursor-pointer">
+          <button onClick={onClose} className="p-1 text-[#8fa7cc] hover:text-white cursor-pointer">
             <X className="w-5 h-5" />
           </button>
         </div>
 
         <form onSubmit={handleSend} className="p-5 space-y-4">
           <div>
-            <label className="text-[13px] text-[#8696a0]">Question</label>
+            <label className="text-[13px] text-[#8fa7cc]">Question</label>
             <input
               type="text"
               value={question}
               onChange={(e) => setQuestion(e.target.value)}
               placeholder="Ask question"
               maxLength={120}
-              className="mt-1 w-full px-3 py-2 rounded-[6px] bg-[#202c33] text-[14px] outline-none"
+              className="mt-1 w-full px-3 py-2 rounded-[6px] bg-[#12254a] text-[14px] outline-none"
             />
           </div>
 
           <div className="space-y-2">
-            <label className="text-[13px] text-[#8696a0]">Options</label>
+            <label className="text-[13px] text-[#8fa7cc]">Options</label>
             {options.map((opt, idx) => (
               <div key={idx} className="flex gap-2">
                 <input
@@ -263,13 +258,13 @@ export const PollModal: React.FC<PollModalProps> = ({ open, onClose, onSubmitPol
                   }}
                   placeholder={`Option ${idx + 1}`}
                   maxLength={80}
-                  className="flex-1 px-3 py-2 rounded-[6px] bg-[#202c33] text-[13.5px] outline-none"
+                  className="flex-1 px-3 py-2 rounded-[6px] bg-[#12254a] text-[13.5px] outline-none"
                 />
                 {options.length > 2 && (
                   <button
                     type="button"
                     onClick={() => setOptions(options.filter((_, i) => i !== idx))}
-                    className="p-2 text-[#8696a0] hover:text-[#f15c6d] cursor-pointer"
+                    className="p-2 text-[#8fa7cc] hover:text-[#f15c6d] cursor-pointer"
                   >
                     <Trash2 className="w-4 h-4" />
                   </button>
@@ -281,7 +276,7 @@ export const PollModal: React.FC<PollModalProps> = ({ open, onClose, onSubmitPol
               <button
                 type="button"
                 onClick={() => setOptions([...options, ''])}
-                className="inline-flex items-center gap-1 text-[13px] text-[#00a884] hover:underline cursor-pointer"
+                className="inline-flex items-center gap-1 text-[13px] text-[#3b82f6] hover:underline cursor-pointer"
               >
                 <Plus className="w-3.5 h-3.5" />
                 Add option
@@ -295,14 +290,14 @@ export const PollModal: React.FC<PollModalProps> = ({ open, onClose, onSubmitPol
               type="checkbox"
               checked={allowMultiple}
               onChange={() => setAllowMultiple(!allowMultiple)}
-              className="accent-[#00a884] w-4 h-4"
+              className="accent-[#3b82f6] w-4 h-4"
             />
           </label>
 
           <button
             type="submit"
             disabled={sending || !question.trim() || validOpts.length < 2}
-            className="w-full py-2 rounded-[6px] bg-[#00a884] hover:bg-[#06cf9c] disabled:opacity-50 text-[#111b21] font-medium text-[14px] cursor-pointer"
+            className="w-full py-2 rounded-[6px] bg-[#3b82f6] hover:bg-[#60a5fa] disabled:opacity-50 text-white font-medium text-[14px] cursor-pointer"
           >
             {sending ? 'Sending...' : 'Send'}
           </button>
@@ -373,10 +368,10 @@ export const ForwardModal: React.FC<ForwardModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 bg-black/65 flex items-center justify-center p-4">
-      <div className="w-full max-w-md rounded-[8px] bg-[#111b21] border border-[#2a3942] text-[#e9edef] shadow-2xl overflow-hidden">
-        <div className="px-5 py-3.5 bg-[#202c33] border-b border-[#2a3942] flex items-center justify-between">
+      <div className="w-full max-w-md rounded-[8px] bg-[#0a1630] border border-[#1d3764] text-[#eaf2ff] shadow-2xl overflow-hidden">
+        <div className="px-5 py-3.5 bg-[#12254a] border-b border-[#1d3764] flex items-center justify-between">
           <h2 className="font-medium text-[16px]">Forward message to</h2>
-          <button onClick={onClose} className="p-1 text-[#8696a0] hover:text-white cursor-pointer">
+          <button onClick={onClose} className="p-1 text-[#8fa7cc] hover:text-white cursor-pointer">
             <X className="w-5 h-5" />
           </button>
         </div>
@@ -402,7 +397,7 @@ export const ForwardModal: React.FC<ForwardModalProps> = ({
                 key={meta.chatId}
                 disabled={forwardingTo === meta.chatId}
                 onClick={() => handleForwardTo(meta.chatId)}
-                className="w-full p-2.5 rounded-[6px] hover:bg-[#202c33] flex items-center justify-between text-left transition cursor-pointer"
+                className="w-full p-2.5 rounded-[6px] hover:bg-[#12254a] flex items-center justify-between text-left transition cursor-pointer"
               >
                 <div className="flex items-center gap-3">
                   <Avatar
@@ -414,7 +409,7 @@ export const ForwardModal: React.FC<ForwardModalProps> = ({
                   />
                   <span className="text-[14.5px]">{title}</span>
                 </div>
-                <span className="text-xs text-[#00a884]">
+                <span className="text-xs text-[#3b82f6]">
                   {forwardingTo === meta.chatId ? 'Sending...' : <Check className="w-4 h-4" />}
                 </span>
               </button>
@@ -471,102 +466,130 @@ export const ImageLightbox: React.FC<{
   );
 };
 
-/* -------------------- 5. Voice Call Overlay -------------------- */
-interface CallOverlayProps {
-  session: CallSession | null;
-  isIncomingRinging: boolean;
-  muted: boolean;
-  onAccept: () => void;
-  onDecline: () => void;
-  onHangup: () => void;
-  onToggleMute: () => void;
-  meUid: string;
+/* -------------------- Chat Lock Dialog -------------------- */
+export type LockDialogMode = 'set' | 'unlock' | 'remove';
+
+interface LockDialogProps {
+  mode: LockDialogMode | null;
+  chatTitle: string;
+  onClose: () => void;
+  /** Resolves to an error message to show, or null when the action succeeded. */
+  onSubmit: (mode: LockDialogMode, passcode: string) => Promise<string | null>;
 }
 
-export const CallOverlay: React.FC<CallOverlayProps> = ({
-  session,
-  isIncomingRinging,
-  muted,
-  onAccept,
-  onDecline,
-  onHangup,
-  onToggleMute,
-  meUid,
-}) => {
-  const [elapsedSec, setElapsedSec] = useState(0);
+export const LockDialog: React.FC<LockDialogProps> = ({ mode, chatTitle, onClose, onSubmit }) => {
+  const [passcode, setPasscode] = useState('');
+  const [confirm, setConfirm] = useState('');
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
 
   useEffect(() => {
-    if (session?.status !== 'connected') {
-      setElapsedSec(0);
+    setPasscode('');
+    setConfirm('');
+    setError(null);
+    setBusy(false);
+  }, [mode]);
+
+  if (!mode) return null;
+
+  const title =
+    mode === 'set' ? 'Lock chat' : mode === 'unlock' ? 'Locked chat' : 'Remove chat lock';
+  const hint =
+    mode === 'set'
+      ? `Choose a passcode for ${chatTitle}. You will need it every time you open this chat.`
+      : mode === 'unlock'
+        ? `Enter the passcode to open ${chatTitle}.`
+        : `Enter the passcode to remove the lock from ${chatTitle}.`;
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (busy) return;
+    if (mode === 'set') {
+      if (passcode.length < 4) {
+        setError('Passcode must be at least 4 characters.');
+        return;
+      }
+      if (passcode !== confirm) {
+        setError('Passcodes do not match.');
+        return;
+      }
+    } else if (!passcode) {
       return;
     }
-    const start = session.connectedAt || Date.now();
-    const timer = setInterval(() => {
-      setElapsedSec(Math.floor((Date.now() - start) / 1000));
-    }, 1000);
-    return () => clearInterval(timer);
-  }, [session?.status, session?.connectedAt]);
+    setBusy(true);
+    const err = await onSubmit(mode, passcode);
+    setBusy(false);
+    if (err) {
+      setError(err);
+      setPasscode('');
+    }
+  };
 
-  if (!session) return null;
-
-  const isCaller = session.callerId === meUid;
-  const peerName = isCaller ? session.calleeName : session.callerName;
-  const peerPhoto = isCaller ? session.calleePhoto : session.callerPhoto;
+  const inputClass =
+    'w-full px-3 py-2.5 rounded-[8px] bg-[#16294d] border border-[#27406e] text-[15px] text-[#eaf2ff] outline-none focus:border-[#3b82f6] tracking-widest';
 
   return (
-    <div className="fixed inset-0 z-50 bg-[#0b141a] flex flex-col items-center justify-between py-16 px-6 text-white select-none">
-      <div className="text-center space-y-1">
-        <h2 className="text-2xl font-normal">{peerName}</h2>
-        <p className="text-[14px] text-[#8696a0]">
-          {session.status === 'connected'
-            ? formatDuration(elapsedSec)
-            : isIncomingRinging
-              ? 'Incoming voice call'
-              : 'Ringing...'}
-        </p>
-      </div>
+    <div className="fixed inset-0 z-50 bg-black/65 flex items-center justify-center p-4">
+      <div className="w-full max-w-sm rounded-[10px] bg-[#0c1b36] border border-[#27406e] text-[#eaf2ff] shadow-2xl overflow-hidden">
+        <div className="px-5 py-3.5 bg-[#12254a] border-b border-[#27406e] flex items-center justify-between">
+          <h2 className="font-medium text-[16px] flex items-center gap-2">
+            <Lock className="w-4 h-4 text-[#60a5fa]" />
+            {title}
+          </h2>
+          <button onClick={onClose} className="p-1 text-[#8fa7cc] hover:text-white cursor-pointer">
+            <X className="w-5 h-5" />
+          </button>
+        </div>
 
-      <Avatar name={peerName} src={peerPhoto} size="xl" />
+        <form onSubmit={handleSubmit} className="p-5 space-y-3.5">
+          <p className="text-[13.5px] text-[#9fb4d6] leading-5">{hint}</p>
 
-      <div className="flex items-center gap-6">
-        {isIncomingRinging && session.status === 'ringing' ? (
-          <>
-            <button
-              onClick={onDecline}
-              className="w-14 h-14 rounded-full bg-[#f15c6d] hover:bg-[#d94455] flex items-center justify-center shadow-lg cursor-pointer"
-              title="Decline"
-            >
-              <PhoneOff className="w-6 h-6" />
-            </button>
-            <button
-              onClick={onAccept}
-              className="w-14 h-14 rounded-full bg-[#00a884] hover:bg-[#06cf9c] text-[#111b21] flex items-center justify-center shadow-lg cursor-pointer"
-              title="Answer"
-            >
-              <Phone className="w-6 h-6" />
-            </button>
-          </>
-        ) : (
-          <>
-            <button
-              onClick={onToggleMute}
-              className={`w-13 h-13 rounded-full flex items-center justify-center transition cursor-pointer ${
-                muted ? 'bg-white text-[#111b21]' : 'bg-[#202c33] text-white hover:bg-[#2a3942]'
-              }`}
-              title={muted ? 'Unmute' : 'Mute'}
-            >
-              {muted ? <MicOff className="w-5 h-5" /> : <Mic className="w-5 h-5" />}
-            </button>
+          <input
+            autoFocus
+            type="password"
+            value={passcode}
+            onChange={(e) => {
+              setPasscode(e.target.value);
+              setError(null);
+            }}
+            placeholder="Passcode"
+            autoComplete="off"
+            className={inputClass}
+          />
 
+          {mode === 'set' && (
+            <input
+              type="password"
+              value={confirm}
+              onChange={(e) => {
+                setConfirm(e.target.value);
+                setError(null);
+              }}
+              placeholder="Confirm passcode"
+              autoComplete="off"
+              className={inputClass}
+            />
+          )}
+
+          {error && <p className="text-[13px] text-[#ff7b8a]">{error}</p>}
+
+          <div className="flex gap-2 pt-1">
             <button
-              onClick={onHangup}
-              className="w-14 h-14 rounded-full bg-[#f15c6d] hover:bg-[#d94455] flex items-center justify-center shadow-lg cursor-pointer"
-              title="End call"
+              type="button"
+              onClick={onClose}
+              className="flex-1 py-2 rounded-[8px] bg-[#16294d] hover:bg-[#1c3563] text-[14px] cursor-pointer"
             >
-              <PhoneOff className="w-6 h-6" />
+              Cancel
             </button>
-          </>
-        )}
+            <button
+              type="submit"
+              disabled={busy}
+              className="flex-1 py-2 rounded-[8px] bg-[#2f6fe4] hover:bg-[#3b82f6] text-white font-medium text-[14px] disabled:opacity-60 cursor-pointer"
+            >
+              {mode === 'set' ? 'Lock' : mode === 'unlock' ? 'Unlock' : 'Remove lock'}
+            </button>
+          </div>
+        </form>
       </div>
     </div>
   );

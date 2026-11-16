@@ -5,6 +5,8 @@ import {
   BellOff,
   Check,
   Heart,
+  Lock,
+  LockOpen,
   LogOut,
   Trash2,
   UserPlus,
@@ -44,6 +46,7 @@ interface InfoDrawerProps {
   blocksMap: Record<string, boolean>;
   onOpenLightbox: (src: string, caption?: string) => void;
   onLeftGroup: () => void;
+  onToggleLock: (chatId: string) => void;
   onToast: (msg: string) => void;
 }
 
@@ -61,6 +64,7 @@ export const InfoDrawer: React.FC<InfoDrawerProps> = ({
   blocksMap,
   onOpenLightbox,
   onLeftGroup,
+  onToggleLock,
   onToast,
 }) => {
   const peerUid =
@@ -140,18 +144,18 @@ export const InfoDrawer: React.FC<InfoDrawerProps> = ({
     <div
       className={`w-full sm:w-[340px] shrink-0 border-l h-full flex flex-col z-20 overflow-y-auto ${
         isLight
-          ? 'bg-white border-[#d1d7db] text-[#111b21]'
-          : 'bg-[#111b21] border-[#2a3942] text-[#e9edef]'
+          ? 'bg-white border-[#cfdcf0] text-[#0a1630]'
+          : 'bg-[#0a1630] border-[#1d3764] text-[#eaf2ff]'
       }`}
     >
       <div
         className={`h-[59px] px-4 flex items-center gap-4 border-b shrink-0 ${
-          isLight ? 'bg-[#f0f2f5] border-[#d1d7db]' : 'bg-[#202c33] border-[#2a3942]'
+          isLight ? 'bg-[#eaf1fc] border-[#cfdcf0]' : 'bg-[#12254a] border-[#1d3764]'
         }`}
       >
         <button
           onClick={onClose}
-          className="p-1.5 rounded-full text-[#8696a0] hover:text-current cursor-pointer"
+          className="p-1.5 rounded-full text-[#8fa7cc] hover:text-current cursor-pointer"
         >
           <X className="w-5 h-5" />
         </button>
@@ -174,8 +178,8 @@ export const InfoDrawer: React.FC<InfoDrawerProps> = ({
             <h2 className="text-[19px] font-normal">{title}</h2>
             {room.type === 'direct' && peer && (
               <>
-                <p className="text-[13.5px] text-[#8696a0]">@{peer.username}</p>
-                <p className="text-[12.5px] text-[#8696a0] mt-0.5">
+                <p className="text-[13.5px] text-[#8fa7cc]">@{peer.username}</p>
+                <p className="text-[12.5px] text-[#8fa7cc] mt-0.5">
                   {isOnline
                     ? 'online'
                     : presenceMap[peer.uid]?.lastSeen
@@ -185,29 +189,23 @@ export const InfoDrawer: React.FC<InfoDrawerProps> = ({
               </>
             )}
             {room.type === 'group' && (
-              <p className="text-[13px] text-[#8696a0]">
+              <p className="text-[13px] text-[#8fa7cc]">
                 Group · {Object.keys(room.members || {}).length} members
               </p>
             )}
           </div>
         </div>
 
-        <div className="space-y-1 pt-2 border-t border-[#222d34]">
-          <p className="text-[13px] text-[#8696a0]">
-            {room.type === 'group' ? 'Description' : 'About'}
-          </p>
-          <p className="text-[14.5px]">
-            {room.type === 'self'
-              ? 'Message yourself'
-              : room.type === 'group'
-                ? room.description || 'No group description'
-                : peer?.about || 'Hey there! I am using Chat Web.'}
-          </p>
-        </div>
+        {room.type === 'group' && (
+          <div className="space-y-1 pt-2 border-t border-[#17294d]">
+            <p className="text-[13px] text-[#8fa7cc]">Description</p>
+            <p className="text-[14.5px]">{room.description || 'No group description'}</p>
+          </div>
+        )}
 
         {room.type === 'direct' && peerUid && friendsMap[peerUid] && (
           <div className="space-y-1.5">
-            <label className="text-[13px] text-[#8696a0]">Nickname</label>
+            <label className="text-[13px] text-[#8fa7cc]">Nickname</label>
             <div className="flex gap-2">
               <input
                 type="text"
@@ -215,12 +213,12 @@ export const InfoDrawer: React.FC<InfoDrawerProps> = ({
                 onChange={(e) => setNickname(e.target.value)}
                 placeholder={peer?.displayName || 'Nickname'}
                 className={`flex-1 px-3 py-2 rounded-[8px] text-[13.5px] outline-none ${
-                  isLight ? 'bg-[#f0f2f5]' : 'bg-[#202c33]'
+                  isLight ? 'bg-[#eaf1fc]' : 'bg-[#12254a]'
                 }`}
               />
               <button
                 onClick={handleSaveNickname}
-                className="px-3 py-2 rounded-[8px] bg-[#00a884] text-[#111b21] cursor-pointer"
+                className="px-3 py-2 rounded-[8px] bg-[#3b82f6] text-white cursor-pointer"
               >
                 <Check className="w-4 h-4" />
               </button>
@@ -229,14 +227,14 @@ export const InfoDrawer: React.FC<InfoDrawerProps> = ({
         )}
 
         {/* Shared Media */}
-        <div className="space-y-2 pt-2 border-t border-[#222d34]">
-          <div className="flex items-center justify-between text-[13px] text-[#8696a0]">
+        <div className="space-y-2 pt-2 border-t border-[#17294d]">
+          <div className="flex items-center justify-between text-[13px] text-[#8fa7cc]">
             <span>Media</span>
             <span>{sharedThumbs.length}</span>
           </div>
 
           {sharedThumbs.length === 0 ? (
-            <p className="text-[13px] text-[#8696a0] py-1">No media shared</p>
+            <p className="text-[13px] text-[#8fa7cc] py-1">No media shared</p>
           ) : (
             <div className="grid grid-cols-3 gap-1.5">
               {sharedThumbs.map((item) => (
@@ -254,15 +252,15 @@ export const InfoDrawer: React.FC<InfoDrawerProps> = ({
 
         {/* Group Members */}
         {room.type === 'group' && (
-          <div className="space-y-2.5 pt-2 border-t border-[#222d34]">
+          <div className="space-y-2.5 pt-2 border-t border-[#17294d]">
             <div className="flex items-center justify-between">
-              <span className="text-[13px] text-[#8696a0]">
+              <span className="text-[13px] text-[#8fa7cc]">
                 {Object.keys(room.members || {}).length} members
               </span>
               {nonGroupFriends.length > 0 && (
                 <button
                   onClick={() => setAddingMembers(!addingMembers)}
-                  className="text-[13px] text-[#00a884] flex items-center gap-1 cursor-pointer"
+                  className="text-[13px] text-[#3b82f6] flex items-center gap-1 cursor-pointer"
                 >
                   <UserPlus className="w-3.5 h-3.5" />
                   Add member
@@ -273,7 +271,7 @@ export const InfoDrawer: React.FC<InfoDrawerProps> = ({
             {addingMembers && (
               <div
                 className={`rounded-[8px] p-3 space-y-2 ${
-                  isLight ? 'bg-[#f0f2f5]' : 'bg-[#202c33]'
+                  isLight ? 'bg-[#eaf1fc]' : 'bg-[#12254a]'
                 }`}
               >
                 {nonGroupFriends.map((f) => {
@@ -291,7 +289,7 @@ export const InfoDrawer: React.FC<InfoDrawerProps> = ({
                         onChange={() =>
                           setSelectedNewMembers({ ...selectedNewMembers, [f.uid]: !checked })
                         }
-                        className="accent-[#00a884]"
+                        className="accent-[#3b82f6]"
                       />
                     </label>
                   );
@@ -307,7 +305,7 @@ export const InfoDrawer: React.FC<InfoDrawerProps> = ({
                     setAddingMembers(false);
                     onToast('Added to group');
                   }}
-                  className="w-full py-1.5 rounded-[6px] bg-[#00a884] text-[#111b21] text-[13px] font-medium cursor-pointer"
+                  className="w-full py-1.5 rounded-[6px] bg-[#3b82f6] text-white text-[13px] font-medium cursor-pointer"
                 >
                   Add
                 </button>
@@ -332,7 +330,7 @@ export const InfoDrawer: React.FC<InfoDrawerProps> = ({
                       </span>
                     </div>
                     {isAdmin && (
-                      <span className="text-[11px] px-2 py-0.5 rounded bg-[#00a884]/15 text-[#00a884]">
+                      <span className="text-[11px] px-2 py-0.5 rounded bg-[#3b82f6]/15 text-[#3b82f6]">
                         Group admin
                       </span>
                     )}
@@ -344,22 +342,34 @@ export const InfoDrawer: React.FC<InfoDrawerProps> = ({
         )}
 
         {/* Actions */}
-        <div className="space-y-1 pt-2 border-t border-[#222d34]">
+        <div className="space-y-1 pt-2 border-t border-[#17294d]">
           {meta && (
             <>
               <button
                 onClick={() => updateUserChatFlags(me.uid, room.id, { favorite: !meta.favorite })}
                 className="w-full py-2.5 px-2 rounded-[6px] text-[14px] flex items-center gap-3 hover:bg-black/10 cursor-pointer"
               >
-                <Heart className="w-4 h-4 text-[#8696a0]" />
+                <Heart className="w-4 h-4 text-[#8fa7cc]" />
                 {meta.favorite ? 'Remove from favorites' : 'Add to favorites'}
+              </button>
+
+              <button
+                onClick={() => onToggleLock(room.id)}
+                className="w-full py-2.5 px-2 rounded-[6px] text-[14px] flex items-center gap-3 hover:bg-black/10 cursor-pointer"
+              >
+                {meta.lockHash ? (
+                  <LockOpen className="w-4 h-4 text-[#8fa7cc]" />
+                ) : (
+                  <Lock className="w-4 h-4 text-[#8fa7cc]" />
+                )}
+                {meta.lockHash ? 'Remove chat lock' : 'Lock chat'}
               </button>
 
               <button
                 onClick={() => updateUserChatFlags(me.uid, room.id, { muted: !meta.muted })}
                 className="w-full py-2.5 px-2 rounded-[6px] text-[14px] flex items-center gap-3 hover:bg-black/10 cursor-pointer"
               >
-                <BellOff className="w-4 h-4 text-[#8696a0]" />
+                <BellOff className="w-4 h-4 text-[#8fa7cc]" />
                 {meta.muted ? 'Unmute notifications' : 'Mute notifications'}
               </button>
 
