@@ -425,29 +425,46 @@ export const ForwardModal: React.FC<ForwardModalProps> = ({
 export const ImageLightbox: React.FC<{
   src: string | null;
   caption?: string;
+  isViewOnce?: boolean;
   onClose: () => void;
-}> = ({ src, caption, onClose }) => {
+}> = ({ src, caption, isViewOnce, onClose }) => {
   if (!src) return null;
   return (
     <div
       onClick={onClose}
-      className="fixed inset-0 z-50 bg-black/90 flex flex-col justify-between p-4 sm:p-6"
+      className="fixed inset-0 z-50 bg-black/95 flex flex-col justify-between p-4 sm:p-6"
     >
-      <div className="flex justify-end gap-2" onClick={(e) => e.stopPropagation()}>
-        <a
-          href={src}
-          download="chat-web-photo.jpg"
-          className="p-2.5 rounded-full bg-white/10 hover:bg-white/20 text-white"
-          title="Download"
-        >
-          <Download className="w-5 h-5" />
-        </a>
-        <button
-          onClick={onClose}
-          className="p-2.5 rounded-full bg-white/10 hover:bg-white/20 text-white cursor-pointer"
-        >
-          <X className="w-5 h-5" />
-        </button>
+      <div className="flex items-center justify-between gap-2" onClick={(e) => e.stopPropagation()}>
+        {isViewOnce ? (
+          <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-white/15 text-white text-[13px] font-medium select-none">
+            <span className="w-5 h-5 rounded-full border-2 border-dashed border-white flex items-center justify-center font-bold text-[11px]">
+              1
+            </span>
+            <span>1-time picture (View once)</span>
+          </div>
+        ) : (
+          <div />
+        )}
+
+        <div className="flex items-center gap-2">
+          {!isViewOnce && (
+            <a
+              href={src}
+              download="chat-web-photo.jpg"
+              className="p-2.5 rounded-full bg-white/10 hover:bg-white/20 text-white cursor-pointer"
+              title="Download"
+            >
+              <Download className="w-5 h-5" />
+            </a>
+          )}
+          <button
+            onClick={onClose}
+            className="p-2.5 rounded-full bg-white/10 hover:bg-white/20 text-white cursor-pointer"
+            title="Close"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        </div>
       </div>
 
       <div className="flex-1 flex items-center justify-center my-4">
@@ -455,7 +472,7 @@ export const ImageLightbox: React.FC<{
           src={src}
           alt={caption || 'Photo'}
           onClick={(e) => e.stopPropagation()}
-          className="max-h-[82vh] max-w-[92vw] object-contain"
+          className="max-h-[82vh] max-w-[92vw] object-contain select-none"
         />
       </div>
 

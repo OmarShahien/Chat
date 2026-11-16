@@ -1,3 +1,7 @@
+import type { BubbleThemeId } from './utils/bubbleThemes';
+
+export type { BubbleThemeId };
+
 export type ThemeMode = 'dark' | 'light';
 
 export type WallpaperId =
@@ -26,6 +30,7 @@ export interface UserProfile {
   privacy?: UserPrivacySettings;
   theme?: ThemeMode;
   wallpaper?: WallpaperId;
+  bubbleTheme?: BubbleThemeId;
   createdAt: number;
   updatedAt: number;
 }
@@ -81,6 +86,9 @@ export interface ChatRoom {
   createdAt: number;
   updatedAt: number;
   pinnedMessage?: PinnedMessageSummary | null;
+  bubbleTheme?: BubbleThemeId;
+  /** Disappearing messages timer in seconds (e.g. 10, 60, 3600, 86400). 0 or null = off */
+  disappearingTimer?: number | null;
 }
 
 export type MessageType = 'text' | 'image' | 'voice' | 'file' | 'poll' | 'system';
@@ -96,6 +104,8 @@ export interface UserChatMeta {
   favorite?: boolean;
   clearedAt?: number;
   wallpaper?: WallpaperId;
+  bubbleTheme?: BubbleThemeId;
+  disappearingTimer?: number | null;
   /** Salted hash of the chat passcode; present only while the chat is locked. */
   lockHash?: string;
   lastMessageId?: string;
@@ -156,6 +166,14 @@ export interface ChatMessage {
   reactions?: Record<string, string>;
   deliveredTo?: Record<string, number>;
   seenBy?: Record<string, number>;
+  bubbleTheme?: BubbleThemeId;
+  /** Disappearing message expiration timestamp (epoch ms) */
+  expiresAt?: number;
+  disappearing?: boolean;
+  /** 1-time picture (View once photo) */
+  viewOnce?: boolean;
+  /** Mapping uid -> timestamp when opened */
+  viewedBy?: Record<string, number>;
   createdAt: number;
 }
 

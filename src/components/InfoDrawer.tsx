@@ -4,6 +4,7 @@ import {
   Ban,
   BellOff,
   Check,
+  Clock,
   Heart,
   Lock,
   LockOpen,
@@ -27,9 +28,10 @@ import {
   fetchMediaPayload,
   leaveGroupChat,
   setBlockedUser,
+  setChatDisappearingTimer,
   updateUserChatFlags,
 } from '../services/chatService';
-import { formatLastSeen } from '../utils/formatters';
+import { formatDisappearingDuration, formatLastSeen } from '../utils/formatters';
 import { Avatar } from './Avatar';
 
 interface InfoDrawerProps {
@@ -78,6 +80,7 @@ export const InfoDrawer: React.FC<InfoDrawerProps> = ({
   const [addingMembers, setAddingMembers] = useState(false);
   const [selectedNewMembers, setSelectedNewMembers] = useState<Record<string, boolean>>({});
   const [sharedThumbs, setSharedThumbs] = useState<Array<{ id: string; url: string; caption?: string }>>([]);
+  const [choosingDisappearing, setChoosingDisappearing] = useState(false);
 
   const isLight = theme === 'light';
 
@@ -343,6 +346,68 @@ export const InfoDrawer: React.FC<InfoDrawerProps> = ({
 
         {/* Actions */}
         <div className="space-y-1 pt-2 border-t border-[#17294d]">
+          {/* Disappearing Messages */}
+          <div className="pt-1">
+            <button
+              onClick={() => setChoosingDisappearing(!choosingDisappearing)}
+              className="w-full py-2.5 px-2 rounded-[6px] text-[14px] flex items-center justify-between hover:bg-black/10 cursor-pointer"
+            >
+              <div className="flex items-center gap-3">
+                <Clock className="w-4 h-4 text-[#8fa7cc]" />
+                <span>Disappearing messages</span>
+              </div>
+              <span className="text-[12.5px] text-[#3b82f6] font-medium">
+                {formatDisappearingDuration(room.disappearingTimer)}
+              </span>
+            </button>
+
+            {choosingDisappearing && (
+              <div
+                className={`mt-1 mb-2 p-2 rounded-[8px] space-y-1 ${
+                  isLight ? 'bg-[#eaf1fc]' : 'bg-[#12254a]'
+                }`}
+              >
+                {[
+                  { label: 'Off', seconds: 0 },
+                  { label: '10 seconds (Quick demo)', seconds: 10 },
+                  { label: '1 minute', seconds: 60 },
+                  { label: '1 hour', seconds: 3600 },
+                  { label: '24 hours', seconds: 86400 },
+                  { label: '7 days', seconds: 604800 },
+                ].map((opt) => {
+                  const current = room.disappearingTimer || 0;
+                  const isSelected = opt.seconds === 0 ? !room.disappearingTimer : current === opt.seconds;
+                  return (
+                    <button
+                      key={opt.seconds}
+                      onClick={async () => {
+                        try {
+                          await setChatDisappearingTimer(me, room, opt.seconds > 0 ? opt.seconds : null);
+                          setChoosingDisappearing(false);
+                          onToast(
+                            opt.seconds > 0
+                              ? `Disappearing messages set to ${opt.label}`
+                              : 'Disappearing messages turned off'
+                          );
+                        } catch (err: unknown) {
+                          onToast((err as Error).message || 'Failed to update');
+                        }
+                      }}
+                      className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-[6px] text-[13px] cursor-pointer ${
+                        isSelected
+                          ? 'bg-[#3b82f6] text-white font-medium'
+                          : 'hover:bg-black/10'
+                      }`}
+                    >
+                      <span>{opt.label}</span>
+                      {isSelected && <Check className="w-3.5 h-3.5" />}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
           {meta && (
             <>
               <button

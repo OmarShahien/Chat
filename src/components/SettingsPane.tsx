@@ -1,8 +1,9 @@
 import React, { useRef, useState } from 'react';
-import { Camera, LogOut } from 'lucide-react';
+import { Camera, Check, LogOut } from 'lucide-react';
 import type { ThemeMode, UserProfile } from '../types';
 import { compressAvatarFile } from '../utils/media';
 import { updateMyProfile } from '../services/chatService';
+import { BUBBLE_THEMES, type BubbleThemeId } from '../utils/bubbleThemes';
 import { Avatar } from './Avatar';
 
 interface SettingsPaneProps {
@@ -63,6 +64,16 @@ export const SettingsPane: React.FC<SettingsPaneProps> = ({
       onToast((err as Error).message || 'Could not save profile');
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleSelectBubbleTheme = async (themeId: BubbleThemeId) => {
+    try {
+      const updated = await updateMyProfile(me, { bubbleTheme: themeId });
+      onProfileUpdated(updated);
+      onToast(`Bubble theme set to ${BUBBLE_THEMES[themeId].name}`);
+    } catch (err: unknown) {
+      onToast((err as Error).message || 'Could not update bubble theme');
     }
   };
 
@@ -218,6 +229,57 @@ export const SettingsPane: React.FC<SettingsPaneProps> = ({
             >
               Light
             </button>
+          </div>
+        </div>
+
+        {/* Bubble Theme */}
+        <div className="space-y-3 pt-4 border-t border-[#17294d]">
+          <div>
+            <h2 className="text-[13px] font-medium text-[#3b82f6]">Bubble Theme</h2>
+            <p className="text-[12.5px] text-[#8fa7cc] mt-0.5">
+              Choose your message bubble style. Other users will see this theme on your messages!
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+            {Object.values(BUBBLE_THEMES).map((bt) => {
+              const isSelected = (me.bubbleTheme || 'blue') === bt.id;
+              return (
+                <button
+                  key={bt.id}
+                  type="button"
+                  onClick={() => handleSelectBubbleTheme(bt.id)}
+                  className={`p-3 rounded-[10px] border text-left transition cursor-pointer flex flex-col justify-between gap-2.5 ${
+                    isSelected
+                      ? 'border-[#3b82f6] bg-[#3b82f6]/10 ring-1 ring-[#3b82f6]'
+                      : isLight
+                        ? 'border-[#cfdcf0] bg-[#f8fafc] hover:bg-[#f1f5f9]'
+                        : 'border-[#1d3764] bg-[#0c1b36] hover:bg-[#12254a]'
+                  }`}
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span
+                        className="w-4 h-4 rounded-full shrink-0 shadow-xs"
+                        style={{ backgroundColor: bt.previewColor }}
+                      />
+                      <div>
+                        <span className="text-[13.5px] font-medium block leading-tight">{bt.name}</span>
+                        <span className="text-[11px] text-[#8fa7cc] block">{bt.description}</span>
+                      </div>
+                    </div>
+                    {isSelected && <Check className="w-4 h-4 text-[#3b82f6] shrink-0" />}
+                  </div>
+
+                  <div className={`rounded-[12px] rounded-br-[3px] px-3 py-1.5 text-[12px] shadow-xs ${bt.outgoingBg}`}>
+                    <span>Hey there! Love this bubble style</span>
+                    <div className={`flex justify-end text-[10px] ${bt.outgoingTime} mt-0.5`}>
+                      <span>10:42 AM</span>
+                    </div>
+                  </div>
+                </button>
+              );
+            })}
           </div>
         </div>
 

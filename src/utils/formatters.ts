@@ -166,3 +166,24 @@ export function getAvatarColor(seed: string): string {
   }
   return colors[Math.abs(hash) % colors.length];
 }
+
+export function formatDisappearingDuration(seconds?: number | null): string {
+  if (!seconds || seconds <= 0) return 'Off';
+  if (seconds < 60) return `${seconds}s`;
+  if (seconds < 3600) return `${Math.round(seconds / 60)} minute${Math.round(seconds / 60) > 1 ? 's' : ''}`;
+  if (seconds < 86400) return `${Math.round(seconds / 3600)} hour${Math.round(seconds / 3600) > 1 ? 's' : ''}`;
+  const days = Math.round(seconds / 86400);
+  return `${days} day${days > 1 ? 's' : ''}`;
+}
+
+export function formatRemainingTime(expiresAt?: number): string {
+  if (!expiresAt) return '';
+  const diffMs = expiresAt - Date.now();
+  if (diffMs <= 0) return 'expired';
+  const totalSecs = Math.ceil(diffMs / 1000);
+  if (totalSecs < 60) return `${totalSecs}s`;
+  if (totalSecs < 3600) return `${Math.ceil(totalSecs / 60)}m`;
+  if (totalSecs < 86400) return `${Math.ceil(totalSecs / 3600)}h`;
+  return `${Math.ceil(totalSecs / 86400)}d`;
+}
+

@@ -31,6 +31,7 @@ import type {
   PollData,
   PinnedMessageSummary,
   TypingEntry,
+  BubbleThemeId,
 } from '../types';
 import {
   encodeEmailKey,
@@ -39,9 +40,43 @@ import {
   generateFriendCode,
   getDirectChatId,
   getSelfChatId,
+  formatDisappearingDuration,
 } from '../utils/formatters';
 
 const mediaMemoryCache = new Map<string, MediaPayload>();
+
+// Track server time offset to eliminate clock skew between clients
+let serverTimeOffset = 0;
+onValue(ref(db, '.info/serverTimeOffset'), (snap) => {
+  serverTimeOffset = typeof snap.val() === 'number' ? snap.val() : 0;
+});
+
+export function getServerTime(): number {
+  return Date.now() + serverTimeOffset;
+}
+
+// Track highest seen timestamp per chat room to enforce causal monotonic ordering
+const latestMessageTimeByChat = new Map<string, number>();
+
+export function recordChatTimestamp(chatId: string, timestamp: number): void {
+  const current = latestMessageTimeByChat.get(chatId) || 0;
+  if (timestamp > current) {
+    latestMessageTimeByChat.set(chatId, timestamp);
+  }
+}
+
+export function sortChatMessages(list: ChatMessage[]): ChatMessage[] {
+  return list.sort((a, b) => {
+    const timeA = typeof a.createdAt === 'number' ? a.createdAt : 0;
+    const timeB = typeof b.createdAt === 'number' ? b.createdAt : 0;
+    if (timeA !== timeB) {
+      return timeA - timeB;
+    }
+    // Stable tie-breaker: Firebase push IDs encode time and are lexicographically sortable
+    return (a.id || '').localeCompare(b.id || '');
+  });
+}
+
 
 export async function bootstrapUserProfile(fbUser: FirebaseUser): Promise<UserProfile> {
   const uid = fbUser.uid;
@@ -88,6 +123,7 @@ export async function bootstrapUserProfile(fbUser: FirebaseUser): Promise<UserPr
         hideOnline: false,
         soundEnabled: true,
       },
+      bubbleTheme: existing.bubbleTheme || 'blue',
       createdAt: existing.createdAt || now,
       updatedAt: now,
     };
@@ -117,6 +153,7 @@ export async function bootstrapUserProfile(fbUser: FirebaseUser): Promise<UserPr
     },
     theme: 'dark',
     wallpaper: 'whatsapp-doodle',
+    bubbleTheme: 'blue',
     createdAt: now,
     updatedAt: now,
   };
@@ -247,7 +284,7 @@ export async function setOfflinePresence(uid: string, hideOnline = false): Promi
 
 export async function updateMyProfile(
   current: UserProfile,
-  patch: Partial<Pick<UserProfile, 'displayName' | 'username' | 'about' | 'photoURL' | 'privacy' | 'theme' | 'wallpaper'>>
+  patch: Partial<Pick<UserProfile, 'displayName' | 'username' | 'about' | 'photoURL' | 'privacy' | 'theme' | 'wallpaper' | 'bubbleTheme'>>
 ): Promise<UserProfile> {
   const uid = current.uid;
   let nextUsername = current.username;
@@ -700,12 +737,33 @@ export interface SendMessageOptions {
   mediaDataUrl?: string;
   mediaMeta?: MediaMeta;
   poll?: PollData;
+  bubbleTheme?: BubbleThemeId;
+  viewOnce?: boolean;
 }
 
 export async function sendChatMessage(opts: SendMessageOptions): Promise<ChatMessage> {
-  const { chatRoom, sender, type, text, replyTo, forwarded, mediaDataUrl, mediaMeta, poll } = opts;
+  const {
+    chatRoom,
+    sender,
+    type,
+    text,
+    replyTo,
+    forwarded,
+    mediaDataUrl,
+    mediaMeta,
+    poll,
+    bubbleTheme,
+    viewOnce,
+  } = opts;
   const chatId = chatRoom.id;
-  const now = Date.now();
+
+  // Monotonic causal clock: guarantees that every message in this chat
+  // has a strictly greater timestamp than any message preceding it,
+  // preventing scrambled ordering when users reply rapidly within the same minute.
+  const serverNow = getServerTime();
+  const lastKnown = latestMessageTimeByChat.get(chatId) || 0;
+  const now = Math.max(serverNow, lastKnown + 1);
+  recordChatTimestamp(chatId, now);
 
   if (chatRoom.type === 'direct') {
     const peerUid = Object.keys(chatRoom.members).find((u) => u !== sender.uid);
@@ -743,6 +801,15 @@ export async function sendChatMessage(opts: SendMessageOptions): Promise<ChatMes
   const msgRef = push(ref(db, `messages/${chatId}`));
   const messageId = msgRef.key!;
 
+  const chosenTheme: BubbleThemeId = bubbleTheme || sender.bubbleTheme || 'blue';
+
+  let expiresAt: number | undefined;
+  let disappearing: boolean | undefined;
+  if (chatRoom.disappearingTimer && chatRoom.disappearingTimer > 0) {
+    disappearing = true;
+    expiresAt = now + chatRoom.disappearingTimer * 1000;
+  }
+
   const message: ChatMessage = {
     id: messageId,
     chatId,
@@ -751,17 +818,20 @@ export async function sendChatMessage(opts: SendMessageOptions): Promise<ChatMes
     senderPhoto: sender.photoURL || '',
     type,
     text: text.trim(),
+    bubbleTheme: chosenTheme,
     ...(mediaId ? { mediaId } : {}),
     ...(mediaMeta ? { mediaMeta } : {}),
     ...(poll ? { poll } : {}),
     ...(replyTo ? { replyTo } : {}),
     ...(forwarded ? { forwarded: true } : {}),
+    ...(viewOnce ? { viewOnce: true } : {}),
+    ...(disappearing ? { disappearing: true, expiresAt } : {}),
     deliveredTo: { [sender.uid]: now },
     seenBy: { [sender.uid]: now },
     createdAt: now,
   };
 
-  const previewText = getMessageSummaryText(type, text.trim(), mediaMeta, poll);
+  const previewText = getMessageSummaryText(type, text.trim(), mediaMeta, poll, viewOnce);
 
   const updates: Record<string, unknown> = {
     [`messages/${chatId}/${messageId}`]: message,
@@ -795,8 +865,10 @@ export function getMessageSummaryText(
   type: MessageType,
   text: string,
   mediaMeta?: MediaMeta,
-  poll?: PollData
+  poll?: PollData,
+  viewOnce?: boolean
 ): string {
+  if (viewOnce) return 'Photo (view once)';
   if (type === 'image') return text || 'Photo';
   if (type === 'voice') {
     const dur = mediaMeta?.durationSec
@@ -973,6 +1045,67 @@ export async function setChatLock(
   await update(ref(db, `userChats/${uid}/${chatId}`), { lockHash });
 }
 
+export async function setChatDisappearingTimer(
+  me: UserProfile,
+  chatRoom: ChatRoom,
+  timerSeconds: number | null
+): Promise<void> {
+  const chatId = chatRoom.id;
+  const serverNow = getServerTime();
+  const lastKnown = latestMessageTimeByChat.get(chatId) || 0;
+  const now = Math.max(serverNow, lastKnown + 1);
+  recordChatTimestamp(chatId, now);
+
+  const sysMsgRef = push(ref(db, `messages/${chatId}`));
+  const sysMsgId = sysMsgRef.key!;
+
+  const timerText =
+    timerSeconds && timerSeconds > 0
+      ? `${me.displayName} set messages to disappear after ${formatDisappearingDuration(timerSeconds)}.`
+      : `${me.displayName} turned off disappearing messages.`;
+
+  const sysMsg: ChatMessage = {
+    id: sysMsgId,
+    chatId,
+    senderId: me.uid,
+    senderName: me.displayName,
+    type: 'system',
+    text: timerText,
+    createdAt: now,
+    deliveredTo: { [me.uid]: now },
+    seenBy: { [me.uid]: now },
+  };
+
+  const updates: Record<string, unknown> = {
+    [`chats/${chatId}/disappearingTimer`]: timerSeconds || null,
+    [`chats/${chatId}/updatedAt`]: now,
+    [`messages/${chatId}/${sysMsgId}`]: sysMsg,
+  };
+
+  const memberUids = Object.keys(chatRoom.members || {}).filter((u) => chatRoom.members[u]);
+  for (const uid of memberUids) {
+    updates[`userChats/${uid}/${chatId}/disappearingTimer`] = timerSeconds || null;
+    updates[`userChats/${uid}/${chatId}/lastMessageId`] = sysMsgId;
+    updates[`userChats/${uid}/${chatId}/lastMessageText`] = timerText;
+    updates[`userChats/${uid}/${chatId}/lastMessageAt`] = now;
+    updates[`userChats/${uid}/${chatId}/lastMessageSenderId`] = me.uid;
+    updates[`userChats/${uid}/${chatId}/lastMessageType`] = 'system';
+  }
+
+  await update(ref(db), updates);
+}
+
+export async function markViewOnceOpened(
+  chatId: string,
+  messageId: string,
+  uid: string
+): Promise<void> {
+  const now = getServerTime();
+  await update(ref(db), {
+    [`messages/${chatId}/${messageId}/viewedBy/${uid}`]: now,
+  });
+}
+
 export function subscribeChatMessages(
   chatId: string,
   onMessages: (msgs: ChatMessage[]) => void
@@ -981,9 +1114,14 @@ export function subscribeChatMessages(
   return onValue(q, (snap) => {
     const list: ChatMessage[] = [];
     snap.forEach((child) => {
-      list.push(child.val() as ChatMessage);
+      const msg = child.val() as ChatMessage;
+      list.push(msg);
+      if (typeof msg.createdAt === 'number') {
+        recordChatTimestamp(chatId, msg.createdAt);
+      }
     });
-    list.sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0));
+    sortChatMessages(list);
     onMessages(list);
   });
 }
+
