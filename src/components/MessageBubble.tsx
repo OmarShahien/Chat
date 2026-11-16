@@ -4,6 +4,7 @@ import {
   BarChart2,
   Check,
   CheckCheck,
+  Clock,
   Copy,
   CornerUpLeft,
   CornerUpRight,
@@ -23,12 +24,19 @@ import {
   deleteMessageForMe,
   fetchMediaPayload,
   getMessageSummaryText,
+  markViewOnceOpened,
   pinMessageInChat,
   toggleMessageReaction,
   voteOnPollOption,
 } from '../services/chatService';
 import { QUICK_REACTIONS } from '../utils/emojis';
-import { formatDuration, formatFileSize, formatMessageTime } from '../utils/formatters';
+import {
+  formatDuration,
+  formatFileSize,
+  formatMessageTime,
+  formatRemainingTime,
+} from '../utils/formatters';
+import { getBubbleTheme } from '../utils/bubbleThemes';
 
 interface MessageBubbleProps {
   message: ChatMessage;
@@ -41,7 +49,7 @@ interface MessageBubbleProps {
   onEdit: (msg: ChatMessage) => void;
   onForward: (msg: ChatMessage) => void;
   onScrollToMessage: (messageId: string) => void;
-  onOpenLightbox: (src: string, caption?: string) => void;
+  onOpenLightbox: (src: string, caption?: string, isViewOnce?: boolean) => void;
   onToast: (msg: string) => void;
 }
 
@@ -187,10 +195,36 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
     }
   };
 
-  // One fixed bubble style shared by every user (independent of the light/dark theme).
-  const bubbleBg = isMine
-    ? 'bg-[#2f6fe4] text-white'
-    : 'bg-[#1c3a66] text-[#eaf2ff]';
+  // Sender's chosen bubble theme visible to everyone
+  const senderThemeId =
+    message.bubbleTheme ||
+    usersMap[message.senderId]?.bubbleTheme ||
+    (isMine ? me.bubbleTheme : undefined) ||
+    'blue';
+
+  const bubbleTheme = getBubbleTheme(senderThemeId);
+  const bubbleBg = isMine ? bubbleTheme.outgoingBg : bubbleTheme.incomingBg;
+  const timeColor = isMine ? bubbleTheme.outgoingTime : bubbleTheme.incomingTime;
+  const checkColor = bubbleTheme.outgoingCheck;
+
+  const handleOpenViewOnce = async () => {
+    let url = mediaUrl;
+    if (!url && message.mediaId) {
+      const payload = await fetchMediaPayload(message.chatId, message.mediaId);
+      if (payload?.dataUrl) {
+        url = payload.dataUrl;
+        setMediaUrl(url);
+      }
+    }
+    if (url) {
+      onOpenLightbox(url, message.text, true);
+      if (!isMine) {
+        await markViewOnceOpened(message.chatId, message.id, me.uid);
+      }
+    } else {
+      onToast('Loading photo...');
+    }
+  };
 
   const waveform = message.mediaMeta?.waveform || [
     28, 52, 40, 74, 90, 56, 38, 68, 85, 48, 62, 78, 44, 34, 65, 82, 50, 42, 60, 35,
@@ -215,7 +249,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
         }`}
       >
         {!isMine && room.type === 'group' && (
-          <p className="text-[12.5px] font-medium text-[#8fd0ff] mb-0.5 truncate">
+          <p className={`text-[12.5px] font-medium ${bubbleTheme.incomingName} mb-0.5 truncate`}>
             {usersMap[message.senderId]?.displayName || message.senderName}
           </p>
         )}
@@ -230,11 +264,13 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
         {message.replyTo && !message.deletedForEveryone && (
           <div
             onClick={() => onScrollToMessage(message.replyTo!.messageId)}
-            className={`mb-1.5 rounded-[5px] px-2.5 py-1.5 border-l-4 border-[#8fd0ff] cursor-pointer text-[12.5px] ${
-              isLight ? 'bg-black/5' : 'bg-black/20'
+            className={`mb-1.5 rounded-[5px] px-2.5 py-1.5 border-l-4 ${
+              isMine ? bubbleTheme.outgoingReplyBorder : bubbleTheme.incomingReplyBorder
+            } cursor-pointer text-[12.5px] ${
+              isMine ? bubbleTheme.outgoingReplyBg : bubbleTheme.incomingReplyBg
             }`}
           >
-            <p className="font-medium text-[#8fd0ff] truncate">
+            <p className="font-medium truncate">
               {message.replyTo.senderId === me.uid ? 'You' : message.replyTo.senderName}
             </p>
             <p className="opacity-80 truncate">{message.replyTo.text || message.replyTo.type}</p>
@@ -249,24 +285,77 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
         ) : (
           <>
             {message.type === 'image' && (
-              <div className="mb-1 overflow-hidden rounded-[6px] bg-black/20">
-                {mediaUrl || message.mediaMeta?.previewDataUrl ? (
-                  <img
-                    src={mediaUrl || message.mediaMeta?.previewDataUrl}
-                    alt={message.text || 'Photo'}
-                    onClick={() => {
-                      if (mediaUrl) onOpenLightbox(mediaUrl, message.text);
-                    }}
-                    className={`max-h-80 w-full object-cover rounded-[6px] cursor-zoom-in transition ${
-                      !mediaUrl ? 'blur-xs scale-105' : ''
-                    }`}
-                  />
-                ) : (
-                  <div className="h-44 w-60 flex items-center justify-center text-xs opacity-60">
-                    Loading...
-                  </div>
-                )}
-              </div>
+              message.viewOnce ? (
+                <div className="my-1">
+                  {!isMine ? (
+                    message.viewedBy?.[me.uid] ? (
+                      <div className="flex items-center gap-2.5 py-2 px-3 rounded-[10px] bg-black/20 opacity-75">
+                        <div className="w-7 h-7 rounded-full border border-white/60 flex items-center justify-center font-bold text-[12px] shrink-0">
+                          ✓
+                        </div>
+                        <div className="min-w-0">
+                          <p className="text-[13px] font-medium leading-4">Opened</p>
+                          <p className="text-[11px] opacity-75">1-time picture</p>
+                        </div>
+                      </div>
+                    ) : (
+                      <button
+                        onClick={handleOpenViewOnce}
+                        className="w-full flex items-center gap-2.5 py-2 px-3 rounded-[10px] bg-black/25 hover:bg-black/35 transition text-left cursor-pointer border border-white/15"
+                      >
+                        <div className="w-7 h-7 rounded-full border-2 border-dashed border-white flex items-center justify-center font-bold text-[12px] shrink-0">
+                          1
+                        </div>
+                        <div className="min-w-0">
+                          <p className="text-[13px] font-medium leading-4">Photo</p>
+                          <p className="text-[11px] opacity-85">1-time picture · Click to view</p>
+                        </div>
+                      </button>
+                    )
+                  ) : (
+                    otherMembers.some((uid) => Boolean(message.viewedBy?.[uid])) ? (
+                      <div className="flex items-center gap-2.5 py-2 px-3 rounded-[10px] bg-black/20 opacity-80">
+                        <div className="w-7 h-7 rounded-full border border-white/60 flex items-center justify-center font-bold text-[12px] shrink-0">
+                          ✓
+                        </div>
+                        <div className="min-w-0">
+                          <p className="text-[13px] font-medium leading-4">Opened</p>
+                          <p className="text-[11px] opacity-75">1-time picture opened</p>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-2.5 py-2 px-3 rounded-[10px] bg-black/20">
+                        <div className="w-7 h-7 rounded-full border-2 border-dashed border-white flex items-center justify-center font-bold text-[12px] shrink-0">
+                          1
+                        </div>
+                        <div className="min-w-0">
+                          <p className="text-[13px] font-medium leading-4">Photo</p>
+                          <p className="text-[11px] opacity-75">1-time picture sent</p>
+                        </div>
+                      </div>
+                    )
+                  )}
+                </div>
+              ) : (
+                <div className="mb-1 overflow-hidden rounded-[6px] bg-black/20">
+                  {mediaUrl || message.mediaMeta?.previewDataUrl ? (
+                    <img
+                      src={mediaUrl || message.mediaMeta?.previewDataUrl}
+                      alt={message.text || 'Photo'}
+                      onClick={() => {
+                        if (mediaUrl) onOpenLightbox(mediaUrl, message.text, false);
+                      }}
+                      className={`max-h-80 w-full object-cover rounded-[6px] cursor-zoom-in transition ${
+                        !mediaUrl ? 'blur-xs scale-105' : ''
+                      }`}
+                    />
+                  ) : (
+                    <div className="h-44 w-60 flex items-center justify-center text-xs opacity-60">
+                      Loading...
+                    </div>
+                  )}
+                </div>
+              )
             )}
 
             {message.type === 'voice' && (
@@ -422,17 +511,26 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
           </>
         )}
 
-        <div className="flex items-center justify-end gap-1 mt-0.5 text-[11px] opacity-65 select-none">
+        <div className={`flex items-center justify-end gap-1.5 mt-0.5 text-[11px] ${timeColor} select-none`}>
+          {message.expiresAt && !message.deletedForEveryone && (
+            <span
+              className="inline-flex items-center gap-1 font-mono opacity-90"
+              title={`Disappears in ${formatRemainingTime(message.expiresAt)}`}
+            >
+              <Clock className="w-3 h-3 stroke-[2.2]" />
+              <span>{formatRemainingTime(message.expiresAt)}</span>
+            </span>
+          )}
           {message.editedAt && !message.deletedForEveryone && <span>Edited</span>}
           <span>{formatMessageTime(message.createdAt)}</span>
           {isMine && !message.deletedForEveryone && (
             <span>
               {receiptStatus === 'seen' ? (
-                <CheckCheck className="w-4 h-4 text-[#b8f0ff]" />
+                <CheckCheck className={`w-4 h-4 ${checkColor}`} />
               ) : receiptStatus === 'delivered' ? (
-                <CheckCheck className="w-4 h-4" />
+                <CheckCheck className="w-4 h-4 opacity-80" />
               ) : (
-                <Check className="w-3.5 h-3.5" />
+                <Check className="w-3.5 h-3.5 opacity-80" />
               )}
             </span>
           )}

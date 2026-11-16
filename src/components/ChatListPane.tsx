@@ -3,6 +3,7 @@ import {
   Archive,
   BellOff,
   CheckCheck,
+  Clock,
   Heart,
   Lock,
   LockOpen,
@@ -25,6 +26,7 @@ import type {
 import { formatChatListTime } from '../utils/formatters';
 import { updateUserChatFlags } from '../services/chatService';
 import { Avatar } from './Avatar';
+import { TypingDots } from './TypingDots';
 
 interface ChatListPaneProps {
   me: UserProfile;
@@ -319,9 +321,12 @@ export const ChatListPane: React.FC<ChatListPaneProps> = ({
                           Locked chat
                         </span>
                       ) : typer ? (
-                        <span className="text-[#3b82f6]">
-                          {item.meta.type === 'group' ? `${typer.name}: ` : ''}
-                          {typer.state === 'recording' ? 'recording audio...' : 'typing...'}
+                        <span className="text-[#3b82f6] flex items-center gap-1 font-medium">
+                          <span>
+                            {item.meta.type === 'group' ? `${typer.name}: ` : ''}
+                            {typer.state === 'recording' ? 'recording audio' : 'typing'}
+                          </span>
+                          <TypingDots size="xs" />
                         </span>
                       ) : (
                         <>
@@ -336,6 +341,9 @@ export const ChatListPane: React.FC<ChatListPaneProps> = ({
                     </div>
 
                     <div className="flex items-center gap-1.5 shrink-0">
+                      {Boolean(item.meta.disappearingTimer) && (
+                        <Clock className="w-3.5 h-3.5 text-[#8fa7cc]" />
+                      )}
                       {item.meta.favorite && (
                         <Heart className="w-3.5 h-3.5 text-[#8fa7cc] fill-[#8fa7cc]" />
                       )}

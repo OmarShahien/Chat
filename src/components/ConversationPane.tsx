@@ -3,6 +3,8 @@ import {
   ArrowDown,
   ArrowLeft,
   BarChart2,
+  Check,
+  Clock,
   CornerUpLeft,
   FileText,
   Image as ImageIcon,
@@ -35,12 +37,15 @@ import {
   markChatMessagesRead,
   pinMessageInChat,
   sendChatMessage,
+  setChatDisappearingTimer,
   setTypingState,
+  sortChatMessages,
   subscribeChatMessages,
 } from '../services/chatService';
 import { EMOJI_CATEGORIES } from '../utils/emojis';
 import {
   formatDateSeparator,
+  formatDisappearingDuration,
   formatDuration,
   formatLastSeen,
   isSameDay,
@@ -56,6 +61,7 @@ import { Avatar } from './Avatar';
 import { InfoDrawer } from './InfoDrawer';
 import { MessageBubble } from './MessageBubble';
 import { PollModal } from './Modals';
+import { TypingDots } from './TypingDots';
 
 interface ConversationPaneProps {
   me: UserProfile;
@@ -69,7 +75,7 @@ interface ConversationPaneProps {
   blocksMap: Record<string, boolean>;
   onBackMobile: () => void;
   onForwardMessage: (msg: ChatMessage) => void;
-  onOpenLightbox: (src: string, caption?: string) => void;
+  onOpenLightbox: (src: string, caption?: string, isViewOnce?: boolean) => void;
   onToggleLock: (chatId: string) => void;
   onToast: (msg: string) => void;
 }
@@ -95,6 +101,9 @@ export const ConversationPane: React.FC<ConversationPaneProps> = ({
   const [replyingTo, setReplyingTo] = useState<ChatMessage | null>(null);
   const [editingMsg, setEditingMsg] = useState<ChatMessage | null>(null);
   const [stagedImage, setStagedImage] = useState<CompressedImageResult | null>(null);
+  const [isViewOnce, setIsViewOnce] = useState(false);
+  const [disappearingModalOpen, setDisappearingModalOpen] = useState(false);
+  const [, setTimerTick] = useState(0);
 
   const [emojiOpen, setEmojiOpen] = useState(false);
   const [emojiSearch, setEmojiSearch] = useState('');
@@ -127,6 +136,14 @@ export const ConversationPane: React.FC<ConversationPaneProps> = ({
   const soundEnabled = me.privacy?.soundEnabled ?? true;
   const sendReadReceipts = me.privacy?.readReceipts ?? true;
 
+  // Active timer ticker to trigger disappearance of expired messages in real time
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setTimerTick((t) => (t + 1) % 10000);
+    }, 1000);
+    return () => clearInterval(interval);
+  }, []);
+
   useEffect(() => {
     if (!room?.id) {
       setMessages([]);
@@ -136,6 +153,7 @@ export const ConversationPane: React.FC<ConversationPaneProps> = ({
     setReplyingTo(null);
     setEditingMsg(null);
     setStagedImage(null);
+    setIsViewOnce(false);
     setEmojiOpen(false);
     setAttachOpen(false);
     setSearchOpen(false);
@@ -161,14 +179,18 @@ export const ConversationPane: React.FC<ConversationPaneProps> = ({
 
   const visibleMessages = useMemo(() => {
     const clearedAt = meta?.clearedAt || 0;
-    return messages.filter((m) => {
+    const now = Date.now();
+    const filtered = messages.filter((m) => {
       if ((m.createdAt || 0) <= clearedAt) return false;
       if (m.deletedFor?.[me.uid]) return false;
+      if (m.expiresAt && m.expiresAt <= now) return false;
       if (searchOpen && chatSearchQuery.trim()) {
         return (m.text || '').toLowerCase().includes(chatSearchQuery.trim().toLowerCase());
       }
       return true;
     });
+    // Strict causal sort guarantees no scrambled ordering
+    return sortChatMessages(filtered);
   }, [messages, meta?.clearedAt, me.uid, searchOpen, chatSearchQuery]);
 
   const filteredEmojis = useMemo(() => {
@@ -226,15 +248,24 @@ export const ConversationPane: React.FC<ConversationPaneProps> = ({
 
   const activeTypers = Object.entries(typingEntries || {})
     .filter(([uid, entry]) => uid !== me.uid && Date.now() - (entry.updatedAt || 0) < 8000)
-    .map(([, entry]) => entry);
+    .map(([uid, entry]) => ({ uid, ...entry }));
+
+  useEffect(() => {
+    if (activeTypers.length > 0 && !showScrollDown) {
+      bottomEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [activeTypers.length, showScrollDown]);
 
   let subtitleNode: React.ReactNode = null;
   if (activeTypers.length > 0) {
     const t = activeTypers[0];
     subtitleNode = (
-      <span className="text-[#3b82f6]">
-        {room.type === 'group' ? `${t.name} is ` : ''}
-        {t.state === 'recording' ? 'recording audio...' : 'typing...'}
+      <span className="text-[#3b82f6] flex items-center gap-1 font-medium">
+        <span>
+          {room.type === 'group' ? `${t.name} is ` : ''}
+          {t.state === 'recording' ? 'recording audio' : 'typing'}
+        </span>
+        <TypingDots size="sm" />
       </span>
     );
   } else if (room.type === 'self') {
@@ -302,10 +333,12 @@ export const ConversationPane: React.FC<ConversationPaneProps> = ({
     const textToSend = inputText;
     const replySnapshot = replyingTo;
     const imgSnapshot = stagedImage;
+    const viewOnceSnapshot = isViewOnce;
 
     setInputText('');
     setReplyingTo(null);
     setStagedImage(null);
+    setIsViewOnce(false);
     setEmojiOpen(false);
     setTypingState(room.id, me.uid, me.displayName, null);
 
@@ -315,6 +348,8 @@ export const ConversationPane: React.FC<ConversationPaneProps> = ({
         sender: me,
         type: imgSnapshot ? 'image' : 'text',
         text: textToSend,
+        bubbleTheme: me.bubbleTheme || 'blue',
+        viewOnce: imgSnapshot ? viewOnceSnapshot : undefined,
         replyTo: replySnapshot
           ? {
               messageId: replySnapshot.id,
@@ -324,7 +359,8 @@ export const ConversationPane: React.FC<ConversationPaneProps> = ({
                 replySnapshot.type,
                 replySnapshot.text,
                 replySnapshot.mediaMeta,
-                replySnapshot.poll
+                replySnapshot.poll,
+                replySnapshot.viewOnce
               ),
               type: replySnapshot.type,
             }
@@ -516,13 +552,47 @@ export const ConversationPane: React.FC<ConversationPaneProps> = ({
                 isGroup={room.type === 'group'}
               />
               <div className="min-w-0">
-                <h2 className="text-[15.5px] font-normal truncate">{chatTitle}</h2>
+                <div className="flex items-center gap-2">
+                  <h2 className="text-[15.5px] font-normal truncate">{chatTitle}</h2>
+                  {room.disappearingTimer && room.disappearingTimer > 0 && (
+                    <span
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setDisappearingModalOpen(true);
+                      }}
+                      title={`Disappearing messages: ${formatDisappearingDuration(room.disappearingTimer)}`}
+                      className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-[#3b82f6]/20 text-[#3b82f6] text-[11px] font-mono cursor-pointer"
+                    >
+                      <Clock className="w-3 h-3 stroke-[2.2]" />
+                      <span>{formatDisappearingDuration(room.disappearingTimer)}</span>
+                    </span>
+                  )}
+                </div>
                 <div className="text-[12.5px] text-[#8fa7cc] truncate">{subtitleNode}</div>
               </div>
             </div>
           </div>
 
           <div className="flex items-center gap-1 shrink-0">
+            <button
+              onClick={() => setDisappearingModalOpen(true)}
+              title={
+                room.disappearingTimer && room.disappearingTimer > 0
+                  ? `Disappearing messages: ${formatDisappearingDuration(room.disappearingTimer)}`
+                  : 'Disappearing messages'
+              }
+              className={`w-10 h-10 rounded-full flex items-center justify-center transition cursor-pointer relative ${
+                room.disappearingTimer && room.disappearingTimer > 0
+                  ? 'text-[#3b82f6] bg-[#3b82f6]/10 hover:bg-[#3b82f6]/20'
+                  : 'text-[#8fa7cc] hover:text-current hover:bg-black/10'
+              }`}
+            >
+              <Clock className="w-[18px] h-[18px]" />
+              {room.disappearingTimer && room.disappearingTimer > 0 && (
+                <span className="absolute top-2 right-2 w-2 h-2 rounded-full bg-[#3b82f6]" />
+              )}
+            </button>
+
             {meta && (
               <button
                 onClick={() => onToggleLock(room.id)}
@@ -680,6 +750,34 @@ export const ConversationPane: React.FC<ConversationPaneProps> = ({
             );
           })}
 
+          {/* Typing Indicator with moving three dots */}
+          {activeTypers.length > 0 && (
+            <div className="flex items-end gap-2 px-3 sm:px-[7%] py-1.5 my-1">
+              <Avatar
+                name={activeTypers[0].name}
+                src={usersMap[activeTypers[0].uid]?.photoURL}
+                size="xs"
+              />
+              <div
+                className={`rounded-[16px] rounded-bl-[4px] px-3.5 py-2 shadow-sm flex items-center gap-2 ${
+                  isLight
+                    ? 'bg-white border border-[#cfdcf0] text-[#0a1630]'
+                    : 'bg-[#1c3a66] border border-[#1d3764] text-[#eaf2ff]'
+                }`}
+              >
+                {room.type === 'group' && (
+                  <span className="text-[12px] font-medium text-[#3b82f6]">
+                    {activeTypers.map((t) => t.name).join(', ')}
+                  </span>
+                )}
+                <span className="text-[12px] opacity-80">
+                  {activeTypers[0].state === 'recording' ? 'recording audio' : 'typing'}
+                </span>
+                <TypingDots size="md" />
+              </div>
+            </div>
+          )}
+
           <div ref={bottomEndRef} />
         </div>
 
@@ -709,16 +807,60 @@ export const ConversationPane: React.FC<ConversationPaneProps> = ({
                 alt="Selected"
                 className="w-12 h-12 rounded-[6px] object-cover"
               />
-              <span className="text-[13px] text-[#8fa7cc]">
-                {stagedImage.width}×{stagedImage.height}
-              </span>
+              <div className="text-[12.5px]">
+                <span className="text-[#8fa7cc] block">
+                  {stagedImage.width}×{stagedImage.height}
+                </span>
+                {isViewOnce ? (
+                  <span className="text-[#3b82f6] font-medium flex items-center gap-1">
+                    <span className="w-4 h-4 rounded-full bg-[#3b82f6] text-white text-[10px] font-bold flex items-center justify-center">
+                      1
+                    </span>
+                    View once (1 time picture)
+                  </span>
+                ) : (
+                  <span className="text-[#8fa7cc]">Standard photo</span>
+                )}
+              </div>
             </div>
-            <button
-              onClick={() => setStagedImage(null)}
-              className="p-1.5 text-[#8fa7cc] hover:text-[#f15c6d] cursor-pointer"
-            >
-              <X className="w-5 h-5" />
-            </button>
+
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  const next = !isViewOnce;
+                  setIsViewOnce(next);
+                  onToast(next ? 'Photo set to view once (1 time)' : 'Standard photo');
+                }}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[12.5px] font-medium transition cursor-pointer border ${
+                  isViewOnce
+                    ? 'bg-[#3b82f6] text-white border-[#3b82f6] shadow-sm'
+                    : isLight
+                      ? 'bg-white border-[#cfdcf0] text-[#4a5f80] hover:bg-black/5'
+                      : 'bg-[#16294d] border-[#1d3764] text-[#cfdcf0] hover:bg-white/10'
+                }`}
+                title="1-time picture (View once)"
+              >
+                <span
+                  className={`w-4.5 h-4.5 rounded-full border-2 border-dashed flex items-center justify-center font-bold text-[11px] ${
+                    isViewOnce ? 'border-white text-white' : 'border-current'
+                  }`}
+                >
+                  1
+                </span>
+                <span>{isViewOnce ? 'View once' : 'View once off'}</span>
+              </button>
+
+              <button
+                onClick={() => {
+                  setStagedImage(null);
+                  setIsViewOnce(false);
+                }}
+                className="p-1.5 text-[#8fa7cc] hover:text-[#f15c6d] cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
           </div>
         )}
 
@@ -1030,6 +1172,79 @@ export const ConversationPane: React.FC<ConversationPaneProps> = ({
         onClose={() => setPollOpen(false)}
         onSubmitPoll={handleSubmitPoll}
       />
+
+      {disappearingModalOpen && (
+        <div
+          className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4"
+          onClick={() => setDisappearingModalOpen(false)}
+        >
+          <div
+            className={`w-full max-w-sm rounded-[14px] p-5 shadow-2xl border ${
+              isLight
+                ? 'bg-white border-[#cfdcf0] text-[#0a1630]'
+                : 'bg-[#12254a] border-[#1d3764] text-[#eaf2ff]'
+            }`}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <Clock className="w-5 h-5 text-[#3b82f6]" />
+                <h3 className="text-[17px] font-semibold">Disappearing Messages</h3>
+              </div>
+              <button
+                onClick={() => setDisappearingModalOpen(false)}
+                className="p-1 rounded-full text-[#8fa7cc] hover:text-current cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <p className="text-[13px] text-[#8fa7cc] mb-4">
+              When turned on, new messages sent in this chat will disappear after the timer ends.
+            </p>
+            <div className="space-y-1.5">
+              {[
+                { label: 'Off', seconds: 0 },
+                { label: '10 seconds (Quick demo)', seconds: 10 },
+                { label: '1 minute', seconds: 60 },
+                { label: '1 hour', seconds: 3600 },
+                { label: '24 hours', seconds: 86400 },
+                { label: '7 days', seconds: 604800 },
+              ].map((opt) => {
+                const current = room.disappearingTimer || 0;
+                const isSelected = opt.seconds === 0 ? !room.disappearingTimer : current === opt.seconds;
+                return (
+                  <button
+                    key={opt.seconds}
+                    onClick={async () => {
+                      try {
+                        await setChatDisappearingTimer(me, room, opt.seconds > 0 ? opt.seconds : null);
+                        setDisappearingModalOpen(false);
+                        onToast(
+                          opt.seconds > 0
+                            ? `Disappearing messages set to ${opt.label}`
+                            : 'Disappearing messages turned off'
+                        );
+                      } catch (err: unknown) {
+                        onToast((err as Error).message || 'Failed to update setting');
+                      }
+                    }}
+                    className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-[8px] text-[14px] transition cursor-pointer ${
+                      isSelected
+                        ? 'bg-[#3b82f6] text-white font-medium'
+                        : isLight
+                          ? 'hover:bg-black/5 text-[#334155]'
+                          : 'hover:bg-white/5 text-[#eaf2ff]'
+                    }`}
+                  >
+                    <span>{opt.label}</span>
+                    {isSelected && <Check className="w-4 h-4" />}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

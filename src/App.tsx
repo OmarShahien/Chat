@@ -62,7 +62,7 @@ export const App: React.FC = () => {
 
   const [newGroupOpen, setNewGroupOpen] = useState(false);
   const [forwardingMsg, setForwardingMsg] = useState<ChatMessage | null>(null);
-  const [lightbox, setLightbox] = useState<{ src: string; caption?: string } | null>(null);
+  const [lightbox, setLightbox] = useState<{ src: string; caption?: string; isViewOnce?: boolean } | null>(null);
   const [toastMsg, setToastMsg] = useState<string | null>(null);
 
   const [pendingInviteCode, setPendingInviteCode] = useState<string | null>(() => {
@@ -476,7 +476,7 @@ export const App: React.FC = () => {
           onBackMobile={() => setActiveChatId(null)}
           onToggleLock={handleToggleLock}
           onForwardMessage={(m) => setForwardingMsg(m)}
-          onOpenLightbox={(src, caption) => setLightbox({ src, caption })}
+          onOpenLightbox={(src, caption, isViewOnce) => setLightbox({ src, caption, isViewOnce })}
           onToast={showToast}
         />
       </div>
@@ -514,6 +514,7 @@ export const App: React.FC = () => {
       <ImageLightbox
         src={lightbox?.src || null}
         caption={lightbox?.caption}
+        isViewOnce={lightbox?.isViewOnce}
         onClose={() => setLightbox(null)}
       />
 
