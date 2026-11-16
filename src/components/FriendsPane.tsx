@@ -135,15 +135,15 @@ export const FriendsPane: React.FC<FriendsPaneProps> = ({
     onToast('Invite link copied');
   };
 
-  const incomingList = Object.values(incomingRequests).sort(
-    (a, b) => (b.createdAt || 0) - (a.createdAt || 0)
-  );
-  const outgoingList = Object.values(outgoingRequests).sort(
-    (a, b) => (b.createdAt || 0) - (a.createdAt || 0)
-  );
-  const friendRecords = Object.values(friendsMap).sort(
-    (a, b) => (b.addedAt || 0) - (a.addedAt || 0)
-  );
+  const incomingList = Object.values(incomingRequests)
+    .filter((r): r is FriendRequest => Boolean(r && r.fromUid))
+    .sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+  const outgoingList = Object.values(outgoingRequests)
+    .filter((r): r is FriendRequest => Boolean(r && r.toUid))
+    .sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+  const friendRecords = Object.values(friendsMap)
+    .filter((r): r is FriendRecord => Boolean(r && r.uid))
+    .sort((a, b) => (b.addedAt || 0) - (a.addedAt || 0));
   const blockedUids = Object.keys(blocksMap).filter((u) => blocksMap[u]);
 
   return (
@@ -234,8 +234,12 @@ export const FriendsPane: React.FC<FriendsPaneProps> = ({
               {friendsMap[foundUser.uid] ? (
                 <button
                   onClick={async () => {
-                    const cId = await ensureDirectChatOpen(me, foundUser.uid);
-                    onOpenChat(cId);
+                    try {
+                      const cId = await ensureDirectChatOpen(me, foundUser.uid);
+                      onOpenChat(cId);
+                    } catch (err: unknown) {
+                      onToast((err as Error).message || 'Could not open chat');
+                    }
                   }}
                   className="w-full py-2 rounded-[6px] bg-[#3b82f6] text-white text-[13.5px] font-medium cursor-pointer"
                 >
@@ -380,8 +384,12 @@ export const FriendsPane: React.FC<FriendsPaneProps> = ({
                 >
                   <div
                     onClick={async () => {
-                      const chatId = await ensureDirectChatOpen(me, rec.uid);
-                      onOpenChat(chatId);
+                      try {
+                        const chatId = await ensureDirectChatOpen(me, rec.uid);
+                        onOpenChat(chatId);
+                      } catch (err: unknown) {
+                        onToast((err as Error).message || 'Could not open chat');
+                      }
                     }}
                     className="flex items-center gap-3 min-w-0 flex-1 cursor-pointer"
                   >
@@ -410,8 +418,12 @@ export const FriendsPane: React.FC<FriendsPaneProps> = ({
                   <div className="flex items-center gap-0.5 shrink-0">
                     <button
                       onClick={async () => {
-                        const chatId = await ensureDirectChatOpen(me, rec.uid);
-                        onOpenChat(chatId);
+                        try {
+                          const chatId = await ensureDirectChatOpen(me, rec.uid);
+                          onOpenChat(chatId);
+                        } catch (err: unknown) {
+                          onToast((err as Error).message || 'Could not open chat');
+                        }
                       }}
                       title="Message"
                       className="p-2 rounded-full text-[#8fa7cc] hover:text-[#3b82f6] cursor-pointer"

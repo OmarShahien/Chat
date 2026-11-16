@@ -142,14 +142,16 @@ export function formatFileSize(bytes?: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
 }
 
-export function getInitials(name?: string): string {
-  if (!name) return '?';
-  const parts = name.trim().split(/\s+/);
+export function getInitials(name?: string | null): string {
+  const trimmed = typeof name === 'string' ? name.trim() : '';
+  if (!trimmed) return '?';
+  const parts = trimmed.split(/\s+/);
   if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
   return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
 }
 
-export function getAvatarColor(seed: string): string {
+export function getAvatarColor(seed?: string | null): string {
+  const safeSeed = typeof seed === 'string' && seed ? seed : 'User';
   const colors = [
     '#3b82f6',
     '#0284c7',
@@ -161,8 +163,8 @@ export function getAvatarColor(seed: string): string {
     '#475569',
   ];
   let hash = 0;
-  for (let i = 0; i < seed.length; i++) {
-    hash = seed.charCodeAt(i) + ((hash << 5) - hash);
+  for (let i = 0; i < safeSeed.length; i++) {
+    hash = safeSeed.charCodeAt(i) + ((hash << 5) - hash);
   }
   return colors[Math.abs(hash) % colors.length];
 }

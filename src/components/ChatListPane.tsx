@@ -68,59 +68,64 @@ export const ChatListPane: React.FC<ChatListPaneProps> = ({
   const isLight = theme === 'light';
 
   const archivedCount = useMemo(
-    () => Object.values(userChats).filter((c) => c.archived).length,
+    () => Object.values(userChats).filter((c) => Boolean(c && c.archived)).length,
     [userChats]
   );
 
   const items = useMemo(() => {
-    const list = Object.values(userChats).map((meta) => {
-      const room = chatRooms[meta.chatId];
-      const peerUid =
-        meta.peerUid ||
-        (room?.type === 'direct'
-          ? Object.keys(room.members || {}).find((u) => u !== me.uid)
-          : undefined);
-      const peerUser = peerUid ? usersMap[peerUid] : undefined;
-      const friendRec = peerUid ? friendsMap[peerUid] : undefined;
+    const list = Object.values(userChats)
+      .filter((meta): meta is UserChatMeta => Boolean(meta && meta.chatId))
+      .map((meta) => {
+        const room = chatRooms[meta.chatId];
+        const peerUid =
+          meta.peerUid ||
+          (room?.type === 'direct'
+            ? Object.keys(room.members || {}).find((u) => u !== me.uid)
+            : undefined);
+        const peerUser = peerUid ? usersMap[peerUid] : undefined;
+        const friendRec = peerUid ? friendsMap[peerUid] : undefined;
 
-      let title = 'Chat';
-      let avatar = '';
-      if (meta.type === 'self' || room?.type === 'self') {
-        title = `${me.displayName} (You)`;
-        avatar = me.photoURL;
-      } else if (meta.type === 'group' || room?.type === 'group') {
-        title = room?.name || 'Group';
-        avatar = room?.photoURL || '';
-      } else if (peerUser) {
-        title = friendRec?.nickname || peerUser.displayName;
-        avatar = peerUser.photoURL || '';
-      }
+        let title = 'Chat';
+        let avatar = '';
+        if (meta.type === 'self' || room?.type === 'self') {
+          title = `${me.displayName} (You)`;
+          avatar = me.photoURL;
+        } else if (meta.type === 'group' || room?.type === 'group') {
+          title = room?.name || 'Group';
+          avatar = room?.photoURL || '';
+        } else if (peerUser) {
+          title = friendRec?.nickname || peerUser.displayName || peerUser.username || 'Chat';
+          avatar = peerUser.photoURL || '';
+        }
 
-      const online = Boolean(
-        peerUid &&
-          presenceMap[peerUid]?.online &&
-          !presenceMap[peerUid]?.hidden
-      );
+        const online = Boolean(
+          peerUid &&
+            presenceMap[peerUid]?.online &&
+            !presenceMap[peerUid]?.hidden
+        );
 
-      const roomTyping = typingMap[meta.chatId] || {};
-      const activeTypers = Object.entries(roomTyping)
-        .filter(
-          ([uid, entry]) =>
-            uid !== me.uid && Date.now() - (entry.updatedAt || 0) < 8000
-        )
-        .map(([, entry]) => entry);
+        const roomTyping = typingMap[meta.chatId] || {};
+        const activeTypers = Object.entries(roomTyping)
+          .filter(
+            ([uid, entry]) =>
+              uid !== me.uid &&
+              Boolean(entry) &&
+              typeof entry === 'object' &&
+              Date.now() - (entry.updatedAt || 0) < 8000
+          )
+          .map(([, entry]) => entry);
 
-      return {
-        meta,
-        room,
-        peerUid,
-        peerUser,
-        title,
-        avatar,
-        online,
-        activeTypers,
-      };
-    });
+        return {
+          meta,
+          room,
+          peerUid,
+          peerUser,
+          title,
+          avatar,
+          online,
+          activeTypers,
+        };
+      });
 
     return list
       .filter((item) => {
@@ -136,7 +141,7 @@ export const ChatListPane: React.FC<ChatListPaneProps> = ({
 
         if (search.trim()) {
           const q = search.trim().toLowerCase();
-          const matchTitle = item.title.toLowerCase().includes(q);
+          const matchTitle = (item.title || '').toLowerCase().includes(q);
           const matchLast =
             !item.meta.lockHash &&
             (item.meta.lastMessageText || '').toLowerCase().includes(q);

@@ -101,11 +101,13 @@ export const InfoDrawer: React.FC<InfoDrawerProps> = ({
         const payload = await fetchMediaPayload(room.id, m.mediaId!);
         return payload ? { id: m.id, url: payload.dataUrl, caption: m.text } : null;
       })
-    ).then((items) => {
-      if (active) {
-        setSharedThumbs(items.filter(Boolean) as Array<{ id: string; url: string; caption?: string }>);
-      }
-    });
+    )
+      .then((items) => {
+        if (active) {
+          setSharedThumbs(items.filter(Boolean) as Array<{ id: string; url: string; caption?: string }>);
+        }
+      })
+      .catch(() => {});
 
     return () => {
       active = false;
@@ -469,9 +471,13 @@ export const InfoDrawer: React.FC<InfoDrawerProps> = ({
           {room.type === 'group' && (
             <button
               onClick={async () => {
-                if (window.confirm(`Exit group "${room.name}"?`)) {
-                  await leaveGroupChat(me, room);
+                if (window.confirm(`Exit group "${room.name || 'Group'}"?`)) {
                   onLeftGroup();
+                  try {
+                    await leaveGroupChat(me, room);
+                  } catch (err: unknown) {
+                    onToast((err as Error).message || 'Could not leave group');
+                  }
                 }
               }}
               className="w-full py-2.5 px-2 rounded-[6px] text-[14px] flex items-center gap-3 text-[#f15c6d] hover:bg-[#f15c6d]/10 cursor-pointer"

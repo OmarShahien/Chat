@@ -7,6 +7,7 @@ import {
   Clock,
   CornerUpLeft,
   FileText,
+  Gamepad2,
   Image as ImageIcon,
   Mic,
   Lock,
@@ -24,6 +25,7 @@ import type {
   ChatMessage,
   ChatRoom,
   FriendRecord,
+  MinigameData,
   PollData,
   PresenceState,
   ThemeMode,
@@ -57,7 +59,9 @@ import {
   type CompressedImageResult,
 } from '../utils/media';
 import { CHAT_WALLPAPER_STYLE } from '../utils/wallpapers';
+import { getMinigameInfo } from '../utils/minigames';
 import { Avatar } from './Avatar';
+import { GameLauncherModal } from './GameCard';
 import { InfoDrawer } from './InfoDrawer';
 import { MessageBubble } from './MessageBubble';
 import { PollModal } from './Modals';
@@ -66,6 +70,7 @@ import { TypingDots } from './TypingDots';
 interface ConversationPaneProps {
   me: UserProfile;
   theme: ThemeMode;
+  selectedChatId?: string | null;
   room: ChatRoom | null;
   meta?: UserChatMeta;
   usersMap: Record<string, UserProfile>;
@@ -83,6 +88,7 @@ interface ConversationPaneProps {
 export const ConversationPane: React.FC<ConversationPaneProps> = ({
   me,
   theme,
+  selectedChatId,
   room,
   meta,
   usersMap,
@@ -103,13 +109,14 @@ export const ConversationPane: React.FC<ConversationPaneProps> = ({
   const [stagedImage, setStagedImage] = useState<CompressedImageResult | null>(null);
   const [isViewOnce, setIsViewOnce] = useState(false);
   const [disappearingModalOpen, setDisappearingModalOpen] = useState(false);
-  const [, setTimerTick] = useState(0);
+  const [timerTick, setTimerTick] = useState(0);
 
   const [emojiOpen, setEmojiOpen] = useState(false);
   const [emojiSearch, setEmojiSearch] = useState('');
   const [emojiCat, setEmojiCat] = useState(EMOJI_CATEGORIES[0].id);
   const [attachOpen, setAttachOpen] = useState(false);
   const [pollOpen, setPollOpen] = useState(false);
+  const [gameModalOpen, setGameModalOpen] = useState(false);
   const [infoOpen, setInfoOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [chatSearchQuery, setChatSearchQuery] = useState('');
@@ -136,13 +143,21 @@ export const ConversationPane: React.FC<ConversationPaneProps> = ({
   const soundEnabled = me.privacy?.soundEnabled ?? true;
   const sendReadReceipts = me.privacy?.readReceipts ?? true;
 
-  // Active timer ticker to trigger disappearance of expired messages in real time
+  const hasTimedItems = useMemo(
+    () =>
+      messages.some((m) => Boolean(m?.expiresAt)) ||
+      Object.keys(typingEntries || {}).length > 0,
+    [messages, typingEntries]
+  );
+
+  // Active timer ticker to trigger disappearance of expired messages and stale typing states in real time
   useEffect(() => {
+    if (!room?.id || !hasTimedItems) return;
     const interval = setInterval(() => {
       setTimerTick((t) => (t + 1) % 10000);
     }, 1000);
     return () => clearInterval(interval);
-  }, []);
+  }, [room?.id, hasTimedItems]);
 
   useEffect(() => {
     if (!room?.id) {
@@ -156,6 +171,10 @@ export const ConversationPane: React.FC<ConversationPaneProps> = ({
     setIsViewOnce(false);
     setEmojiOpen(false);
     setAttachOpen(false);
+    setPollOpen(false);
+    setGameModalOpen(false);
+    setDisappearingModalOpen(false);
+    setInfoOpen(false);
     setSearchOpen(false);
     setChatSearchQuery('');
 
@@ -172,6 +191,7 @@ export const ConversationPane: React.FC<ConversationPaneProps> = ({
   }, [room?.id, me.uid, sendReadReceipts]);
 
   useEffect(() => {
+    if (!room?.id) return;
     if (!showScrollDown) {
       bottomEndRef.current?.scrollIntoView({ behavior: 'smooth' });
     }
@@ -181,6 +201,7 @@ export const ConversationPane: React.FC<ConversationPaneProps> = ({
     const clearedAt = meta?.clearedAt || 0;
     const now = Date.now();
     const filtered = messages.filter((m) => {
+      if (!m || typeof m !== 'object') return false;
       if ((m.createdAt || 0) <= clearedAt) return false;
       if (m.deletedFor?.[me.uid]) return false;
       if (m.expiresAt && m.expiresAt <= now) return false;
@@ -191,7 +212,8 @@ export const ConversationPane: React.FC<ConversationPaneProps> = ({
     });
     // Strict causal sort guarantees no scrambled ordering
     return sortChatMessages(filtered);
-  }, [messages, meta?.clearedAt, me.uid, searchOpen, chatSearchQuery]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [messages, meta?.clearedAt, me.uid, searchOpen, chatSearchQuery, timerTick]);
 
   const filteredEmojis = useMemo(() => {
     if (emojiSearch.trim()) {
@@ -203,8 +225,71 @@ export const ConversationPane: React.FC<ConversationPaneProps> = ({
     return EMOJI_CATEGORIES.find((c) => c.id === emojiCat)?.emojis || [];
   }, [emojiCat, emojiSearch]);
 
-  // Empty state (no conversation selected)
+  const activeTypers = useMemo(
+    () =>
+      Object.entries(typingEntries || {})
+        .filter(
+          ([uid, entry]) =>
+            uid !== me.uid &&
+            Boolean(entry) &&
+            typeof entry === 'object' &&
+            Date.now() - (entry.updatedAt || 0) < 8000
+        )
+        .map(([uid, entry]) => ({
+          uid,
+          state: entry.state === 'recording' ? ('recording' as const) : ('typing' as const),
+          name:
+            typeof entry.name === 'string' && entry.name
+              ? entry.name
+              : usersMap[uid]?.displayName || 'Someone',
+          updatedAt: entry.updatedAt || 0,
+        })),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [typingEntries, me.uid, usersMap, timerTick]
+  );
+
+  useEffect(() => {
+    if (!room?.id) return;
+    if (activeTypers.length > 0 && !showScrollDown) {
+      bottomEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [room?.id, activeTypers.length, showScrollDown]);
+
+  // Loading or empty state when room is not yet available
   if (!room) {
+    if (selectedChatId) {
+      return (
+        <div
+          className={`flex-1 h-full flex flex-col ${
+            isLight
+              ? 'bg-[#eaf1fc] text-[#0a1630]'
+              : 'bg-[#0c1b36] text-[#eaf2ff]'
+          }`}
+        >
+          <header
+            className={`h-[59px] px-3 sm:px-4 flex items-center gap-2.5 border-b shrink-0 ${
+              isLight
+                ? 'bg-[#eaf1fc] border-[#cfdcf0] text-[#0a1630]'
+                : 'bg-[#12254a] border-[#1d3764] text-[#eaf2ff]'
+            }`}
+          >
+            <button
+              onClick={onBackMobile}
+              className="md:hidden p-1.5 rounded-full text-[#8fa7cc] hover:text-current cursor-pointer"
+              title="Back"
+            >
+              <ArrowLeft className="w-5 h-5" />
+            </button>
+            <span className="text-[14.5px] text-[#8fa7cc]">Opening chat...</span>
+          </header>
+          <div className="flex-1 flex flex-col items-center justify-center gap-3 p-6 text-center">
+            <div className="w-8 h-8 rounded-full border-2 border-[#3b82f6] border-t-transparent animate-spin" />
+            <p className="text-[13.5px] text-[#8fa7cc]">Loading conversation...</p>
+          </div>
+        </div>
+      );
+    }
+
     return (
       <div
         className={`flex-1 h-full flex flex-col items-center justify-center p-8 text-center select-none border-b-[6px] border-[#3b82f6] ${
@@ -245,16 +330,6 @@ export const ConversationPane: React.FC<ConversationPaneProps> = ({
       : room.type === 'group'
         ? room.photoURL
         : peerUser?.photoURL;
-
-  const activeTypers = Object.entries(typingEntries || {})
-    .filter(([uid, entry]) => uid !== me.uid && Date.now() - (entry.updatedAt || 0) < 8000)
-    .map(([uid, entry]) => ({ uid, ...entry }));
-
-  useEffect(() => {
-    if (activeTypers.length > 0 && !showScrollDown) {
-      bottomEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-    }
-  }, [activeTypers.length, showScrollDown]);
 
   let subtitleNode: React.ReactNode = null;
   if (activeTypers.length > 0) {
@@ -360,7 +435,8 @@ export const ConversationPane: React.FC<ConversationPaneProps> = ({
                 replySnapshot.text,
                 replySnapshot.mediaMeta,
                 replySnapshot.poll,
-                replySnapshot.viewOnce
+                replySnapshot.viewOnce,
+                replySnapshot.game
               ),
               type: replySnapshot.type,
             }
@@ -438,6 +514,20 @@ export const ConversationPane: React.FC<ConversationPaneProps> = ({
       poll,
     });
     playUiSound('send', soundEnabled);
+  };
+
+  const handleLaunchGame = async (gameData: MinigameData) => {
+    const info = getMinigameInfo(gameData.kind);
+    await sendChatMessage({
+      chatRoom: room,
+      sender: me,
+      type: 'game',
+      text: info.title,
+      game: gameData,
+    });
+    playUiSound('send', soundEnabled);
+    setShowScrollDown(false);
+    setTimeout(() => bottomEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 60);
   };
 
   const startVoiceRecording = async () => {
@@ -667,7 +757,7 @@ export const ConversationPane: React.FC<ConversationPaneProps> = ({
         )}
 
         {/* Pinned Message */}
-        {room.pinnedMessage && (
+        {room.pinnedMessage?.messageId && (
           <div
             onClick={() => scrollToMessage(room.pinnedMessage!.messageId)}
             className={`px-4 py-2 border-b flex items-center justify-between gap-3 cursor-pointer z-10 ${
@@ -678,7 +768,7 @@ export const ConversationPane: React.FC<ConversationPaneProps> = ({
           >
             <div className="flex items-center gap-2.5 min-w-0">
               <Pin className="w-4 h-4 text-[#3b82f6] shrink-0 rotate-45" />
-              <p className="text-[13px] truncate">{room.pinnedMessage.text}</p>
+              <p className="text-[13px] truncate">{room.pinnedMessage.text || ''}</p>
             </div>
             <button
               onClick={(e) => {
@@ -893,7 +983,9 @@ export const ConversationPane: React.FC<ConversationPaneProps> = ({
                           replyingTo.type,
                           replyingTo.text,
                           replyingTo.mediaMeta,
-                          replyingTo.poll
+                          replyingTo.poll,
+                          replyingTo.viewOnce,
+                          replyingTo.game
                         )
                       : ''}
                 </p>
@@ -999,6 +1091,17 @@ export const ConversationPane: React.FC<ConversationPaneProps> = ({
               <BarChart2 className="w-4 h-4 text-amber-400" />
               <span>Poll</span>
             </button>
+
+            <button
+              onClick={() => {
+                setAttachOpen(false);
+                setGameModalOpen(true);
+              }}
+              className="w-full px-4 py-2.5 text-left hover:bg-black/10 flex items-center gap-3 cursor-pointer"
+            >
+              <Gamepad2 className="w-4 h-4 text-emerald-400" />
+              <span>Minigames</span>
+            </button>
           </div>
         )}
 
@@ -1079,6 +1182,20 @@ export const ConversationPane: React.FC<ConversationPaneProps> = ({
                 }`}
               >
                 <Plus className="w-6 h-6" />
+              </button>
+
+              <button
+                onClick={() => {
+                  setEmojiOpen(false);
+                  setAttachOpen(false);
+                  setGameModalOpen(true);
+                }}
+                title="Play a minigame"
+                className={`p-2 rounded-full transition cursor-pointer ${
+                  gameModalOpen ? 'text-[#3b82f6]' : 'text-[#8fa7cc] hover:text-[#3b82f6]'
+                }`}
+              >
+                <Gamepad2 className="w-6 h-6" />
               </button>
 
               <div
@@ -1171,6 +1288,16 @@ export const ConversationPane: React.FC<ConversationPaneProps> = ({
         open={pollOpen}
         onClose={() => setPollOpen(false)}
         onSubmitPoll={handleSubmitPoll}
+      />
+
+      <GameLauncherModal
+        open={gameModalOpen}
+        onClose={() => setGameModalOpen(false)}
+        room={room}
+        me={me}
+        isLight={isLight}
+        onLaunchGame={handleLaunchGame}
+        onToast={onToast}
       />
 
       {disappearingModalOpen && (

@@ -17,6 +17,7 @@ import type {
   UserProfile,
 } from '../types';
 import { compressAvatarFile } from '../utils/media';
+import { createInitialMinigameData, getMinigameInfo } from '../utils/minigames';
 import {
   createGroupChat,
   fetchMediaPayload,
@@ -31,7 +32,7 @@ interface NewGroupModalProps {
   me: UserProfile;
   friendsMap: Record<string, FriendRecord>;
   usersMap: Record<string, UserProfile>;
-  onCreated: (chatId: string) => void;
+  onCreated: (chatId: string, room: ChatRoom, meta: UserChatMeta) => void;
   onToast: (msg: string) => void;
 }
 
@@ -53,7 +54,9 @@ export const NewGroupModal: React.FC<NewGroupModalProps> = ({
 
   if (!open) return null;
 
-  const friends = Object.values(friendsMap);
+  const friends = Object.values(friendsMap).filter(
+    (rec): rec is FriendRecord => Boolean(rec && rec.uid)
+  );
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -64,13 +67,13 @@ export const NewGroupModal: React.FC<NewGroupModalProps> = ({
     }
     setCreating(true);
     try {
-      const chatId = await createGroupChat(me, name, desc, chosen, photo);
+      const { chatId, room, meta } = await createGroupChat(me, name, desc, chosen, photo);
       setName('');
       setDesc('');
       setPhoto('');
       setSelected({});
       onClose();
-      onCreated(chatId);
+      onCreated(chatId, room, meta);
     } catch (err: unknown) {
       onToast((err as Error).message || 'Could not create group');
     } finally {
@@ -105,9 +108,14 @@ export const NewGroupModal: React.FC<NewGroupModalProps> = ({
                 accept="image/*"
                 onChange={async (e) => {
                   const file = e.target.files?.[0];
+                  e.target.value = '';
                   if (file) {
-                    const url = await compressAvatarFile(file);
-                    setPhoto(url);
+                    try {
+                      const url = await compressAvatarFile(file);
+                      setPhoto(url);
+                    } catch {
+                      onToast('Could not process group icon');
+                    }
                   }
                 }}
                 className="hidden"
@@ -152,10 +160,12 @@ export const NewGroupModal: React.FC<NewGroupModalProps> = ({
                       className="flex items-center justify-between p-2 rounded-[6px] hover:bg-[#12254a] cursor-pointer"
                     >
                       <div className="flex items-center gap-2.5">
-                        <Avatar name={u?.displayName || 'Contact'} src={u?.photoURL} size="sm" />
+                        <Avatar name={rec.nickname || u?.displayName || 'Contact'} src={u?.photoURL} size="sm" />
                         <div>
-                          <p className="text-[14px]">{u?.displayName || 'Contact'}</p>
-                          <p className="text-[12px] text-[#8fa7cc]">@{u?.username}</p>
+                          <p className="text-[14px]">{rec.nickname || u?.displayName || 'Contact'}</p>
+                          {u?.username && (
+                            <p className="text-[12px] text-[#8fa7cc]">@{u.username}</p>
+                          )}
                         </div>
                       </div>
                       <input
@@ -331,9 +341,9 @@ export const ForwardModal: React.FC<ForwardModalProps> = ({
 
   if (!message) return null;
 
-  const chats = Object.values(userChats).sort(
-    (a, b) => (b.lastMessageAt || 0) - (a.lastMessageAt || 0)
-  );
+  const chats = Object.values(userChats)
+    .filter((m): m is UserChatMeta => Boolean(m && m.chatId))
+    .sort((a, b) => (b.lastMessageAt || 0) - (a.lastMessageAt || 0));
 
   const handleForwardTo = async (targetChatId: string) => {
     const targetRoom = chatRooms[targetChatId];
@@ -346,6 +356,20 @@ export const ForwardModal: React.FC<ForwardModalProps> = ({
         mediaDataUrl = media?.dataUrl;
       }
 
+      const forwardedGame =
+        message.type === 'game' && message.game
+          ? createInitialMinigameData({
+              kind: message.game.kind,
+              host: me,
+              mode:
+                getMinigameInfo(message.game.kind).category === 'party'
+                  ? 'party'
+                  : targetRoom.type === 'self'
+                    ? 'bot'
+                    : 'pvp',
+            })
+          : undefined;
+
       await sendChatMessage({
         chatRoom: targetRoom,
         sender: me,
@@ -355,6 +379,7 @@ export const ForwardModal: React.FC<ForwardModalProps> = ({
         mediaDataUrl,
         mediaMeta: message.mediaMeta,
         poll: message.poll,
+        game: forwardedGame,
       });
 
       onToast('Forwarded');
