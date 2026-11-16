@@ -1,0 +1,26 @@
+# Dependencies
+node_modules
+.pnp
+.pnp.js
+
+# Production build
+dist
+build
+
+# Firebase cache
+.firebase
+firebase-debug.log*
+database-debug.log*
+ui-debug.log*
+
+# Environment & Editor
+.env
+.env.local
+.env.*.local
+*.tsbuildinfo
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
