@@ -37,6 +37,7 @@ import {
   formatRemainingTime,
 } from '../utils/formatters';
 import { getBubbleTheme } from '../utils/bubbleThemes';
+import { GameCard } from './GameCard';
 
 interface MessageBubbleProps {
   message: ChatMessage;
@@ -54,6 +55,7 @@ interface MessageBubbleProps {
 }
 
 function renderLinkifiedText(text: string): React.ReactNode {
+  if (typeof text !== 'string') return String(text ?? '');
   const urlRegex = /(https?:\/\/[^\s]+)/g;
   const parts = text.split(urlRegex);
   return parts.map((part, idx) => {
@@ -105,11 +107,13 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
   useEffect(() => {
     let active = true;
     if (message.mediaId && !message.deletedForEveryone) {
-      fetchMediaPayload(message.chatId, message.mediaId).then((payload) => {
-        if (active && payload?.dataUrl) {
-          setMediaUrl(payload.dataUrl);
-        }
-      });
+      fetchMediaPayload(message.chatId, message.mediaId)
+        .then((payload) => {
+          if (active && payload?.dataUrl) {
+            setMediaUrl(payload.dataUrl);
+          }
+        })
+        .catch(() => {});
     }
     return () => {
       active = false;
@@ -153,7 +157,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
 
   const reactionGroups: Record<string, string[]> = {};
   Object.entries(message.reactions || {}).forEach(([uid, emoji]) => {
-    if (!emoji) return;
+    if (!emoji || typeof emoji !== 'string') return;
     if (!reactionGroups[emoji]) reactionGroups[emoji] = [];
     reactionGroups[emoji].push(uid);
   });
@@ -244,7 +248,11 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
       }}
     >
       <div
-        className={`relative max-w-[85%] sm:max-w-[65%] min-w-[96px] rounded-[16px] px-3 pt-1.5 pb-1 shadow-[0_1px_2px_rgba(4,12,30,0.35)] ${bubbleBg} ${
+        className={`relative ${
+          message.type === 'game'
+            ? 'w-[300px] sm:w-[340px] max-w-[90%]'
+            : 'max-w-[85%] sm:max-w-[65%] min-w-[96px]'
+        } rounded-[16px] px-3 pt-1.5 pb-1 shadow-[0_1px_2px_rgba(4,12,30,0.35)] ${bubbleBg} ${
           isMine ? 'rounded-br-[4px]' : 'rounded-bl-[4px]'
         }`}
       >
@@ -453,15 +461,19 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
                 </div>
 
                 <div className="space-y-1.5">
-                  {Object.values(message.poll.options || {}).map((opt) => {
-                    const allOptions = Object.values(message.poll!.options || {});
-                    const totalVotes = allOptions.reduce(
-                      (acc, o) => acc + Object.keys(o.votes || {}).length,
-                      0
-                    );
-                    const optVotes = Object.keys(opt.votes || {}).length;
-                    const pct = totalVotes > 0 ? Math.round((optVotes / totalVotes) * 100) : 0;
-                    const votedByMe = Boolean(opt.votes?.[me.uid]);
+                  {Object.values(message.poll.options || {})
+                    .filter((opt) => Boolean(opt && typeof opt === 'object'))
+                    .map((opt) => {
+                      const allOptions = Object.values(message.poll!.options || {}).filter(
+                        (o) => Boolean(o && typeof o === 'object')
+                      );
+                      const totalVotes = allOptions.reduce(
+                        (acc, o) => acc + Object.keys(o.votes || {}).length,
+                        0
+                      );
+                      const optVotes = Object.keys(opt.votes || {}).length;
+                      const pct = totalVotes > 0 ? Math.round((optVotes / totalVotes) * 100) : 0;
+                      const votedByMe = Boolean(opt.votes?.[me.uid]);
 
                     return (
                       <button
@@ -503,7 +515,11 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
               </div>
             )}
 
-            {message.text && message.type !== 'poll' && (
+            {message.type === 'game' && message.game && (
+              <GameCard message={message} room={room} me={me} onToast={onToast} />
+            )}
+
+            {message.text && message.type !== 'poll' && message.type !== 'game' && (
               <p className="text-[14.2px] leading-[19px] whitespace-pre-wrap break-words">
                 {renderLinkifiedText(message.text)}
               </p>
@@ -703,7 +719,9 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
                           message.type,
                           message.text,
                           message.mediaMeta,
-                          message.poll
+                          message.poll,
+                          message.viewOnce,
+                          message.game
                         ),
                         senderName: message.senderName,
                         pinnedBy: me.uid,

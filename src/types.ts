@@ -91,7 +91,84 @@ export interface ChatRoom {
   disappearingTimer?: number | null;
 }
 
-export type MessageType = 'text' | 'image' | 'voice' | 'file' | 'poll' | 'system';
+export type MessageType = 'text' | 'image' | 'voice' | 'file' | 'poll' | 'game' | 'system';
+
+export type MinigameKind =
+  | 'tictactoe'
+  | 'connect4'
+  | 'rps'
+  | 'wordle'
+  | 'memory'
+  | 'mathblitz';
+
+export type MinigameMode = 'pvp' | 'bot' | 'pass' | 'party';
+
+export type RpsThrow = 'rock' | 'paper' | 'scissors';
+
+export interface RpsRoundSummary {
+  round: number;
+  p1Move: RpsThrow;
+  p2Move: RpsThrow;
+  winner: 'p1' | 'p2' | 'draw';
+}
+
+export interface WordlePlayerState {
+  uid: string;
+  name: string;
+  /** Pipe-delimited uppercase 5-letter guesses, e.g. 'SLATE|CRANE'. Empty string '' when none. */
+  guesses: string;
+  status: 'playing' | 'won' | 'lost';
+  completedAt?: number;
+}
+
+export interface MinigameLeaderboardEntry {
+  uid: string;
+  name: string;
+  score: number;
+  moves?: number;
+  timeMs: number;
+  completedAt: number;
+}
+
+export interface MinigameData {
+  kind: MinigameKind;
+  mode: MinigameMode;
+  hostUid: string;
+  hostName: string;
+  guestUid?: string;
+  guestName?: string;
+  status: 'waiting' | 'active' | 'finished';
+  /** 'p1' = host, 'p2' = guest / bot / player 2 */
+  turn?: 'p1' | 'p2';
+  /** 'p1', 'p2', or 'draw' when finished */
+  winner?: 'p1' | 'p2' | 'draw' | '';
+  p1Score?: number;
+  p2Score?: number;
+  roundNumber?: number;
+
+  // Tic-Tac-Toe (9-char string of '.', 'X', 'O') & Connect Four (42-char string of '.', '1', '2')
+  board?: string;
+  winLine?: string;
+  lastMoveIndex?: number;
+
+  // Rock Paper Scissors (Best of 3)
+  p1RoundWins?: number;
+  p2RoundWins?: number;
+  p1Pick?: RpsThrow | '';
+  p2Pick?: RpsThrow | '';
+  lastRound?: RpsRoundSummary;
+
+  // Word Guess (5-letter Wordle)
+  secretWord?: string;
+  isCustomWord?: boolean;
+  wordPlayers?: Record<string, WordlePlayerState>;
+
+  // Seeded Party Games (Emoji Memory & Math Blitz)
+  seed?: number;
+  leaderboard?: Record<string, MinigameLeaderboardEntry>;
+
+  updatedAt: number;
+}
 
 export interface UserChatMeta {
   chatId: string;
@@ -157,6 +234,7 @@ export interface ChatMessage {
   mediaId?: string;
   mediaMeta?: MediaMeta;
   poll?: PollData;
+  game?: MinigameData;
   replyTo?: ReplyPreview;
   forwarded?: boolean;
   editedAt?: number;

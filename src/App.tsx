@@ -26,6 +26,7 @@ import { playUiSound } from './utils/media';
 import { AuthScreen } from './components/AuthScreen';
 import { ChatListPane } from './components/ChatListPane';
 import { ConversationPane } from './components/ConversationPane';
+import { ErrorBoundary } from './components/ErrorBoundary';
 import { FriendsPane } from './components/FriendsPane';
 import {
   ForwardModal,
@@ -73,6 +74,10 @@ export const App: React.FC = () => {
 
   const prevLastMsgIdMapRef = useRef<Record<string, string>>({});
   const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const activeChatIdRef = useRef<string | null>(null);
+  const soundEnabledRef = useRef<boolean>(true);
+  activeChatIdRef.current = activeChatId;
+  soundEnabledRef.current = me?.privacy?.soundEnabled ?? true;
 
   const showToast = useCallback((msg: string) => {
     setToastMsg(msg);
@@ -137,15 +142,26 @@ export const App: React.FC = () => {
 
     unsubs.push(
       onValue(ref(db, `users/${me.uid}`), (snap) => {
-        if (snap.exists()) {
-          setMe(snap.val() as UserProfile);
+        if (snap.exists() && snap.val() && typeof snap.val() === 'object') {
+          setMe({ ...(snap.val() as UserProfile), uid: me.uid });
         }
       })
     );
 
     unsubs.push(
       onValue(ref(db, `userChats/${me.uid}`), (snap) => {
-        const map: Record<string, UserChatMeta> = snap.exists() ? snap.val() : {};
+        const raw: Record<string, UserChatMeta> =
+          snap.exists() && snap.val() && typeof snap.val() === 'object' ? snap.val() : {};
+        const map: Record<string, UserChatMeta> = {};
+
+        Object.entries(raw).forEach(([key, meta]) => {
+          if (!meta || typeof meta !== 'object') return;
+          // Skip partial receipt-only fragments created after leaving a chat
+          if (!meta.type && !meta.chatId && meta.lastMessageAt === undefined) return;
+          const normalizedChatId = meta.chatId || key;
+          map[normalizedChatId] = { ...meta, chatId: normalizedChatId };
+        });
+
         setUserChats(map);
 
         Object.values(map).forEach((meta) => {
@@ -157,9 +173,9 @@ export const App: React.FC = () => {
             meta.lastMessageSenderId !== me.uid
           ) {
             if (!meta.muted) {
-              playUiSound('receive', me.privacy?.soundEnabled ?? true);
+              playUiSound('receive', soundEnabledRef.current);
             }
-            if (activeChatId !== meta.chatId) {
+            if (activeChatIdRef.current !== meta.chatId) {
               markBackgroundMessagesDelivered(meta.chatId, me.uid);
             }
           }
@@ -200,7 +216,12 @@ export const App: React.FC = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [me?.uid]);
 
-  const chatIdListKey = useMemo(() => Object.keys(userChats).sort().join(','), [userChats]);
+  const chatIdListKey = useMemo(() => {
+    const ids = new Set(Object.keys(userChats));
+    if (activeChatId) ids.add(activeChatId);
+    return Array.from(ids).sort().join(',');
+  }, [userChats, activeChatId]);
+
   useEffect(() => {
     if (!me?.uid || !chatIdListKey) return;
     const ids = chatIdListKey.split(',').filter(Boolean);
@@ -208,20 +229,37 @@ export const App: React.FC = () => {
 
     ids.forEach((cId) => {
       unsubs.push(
-        onValue(ref(db, `chats/${cId}`), (snap) => {
-          if (snap.exists()) {
-            setChatRooms((prev) => ({ ...prev, [cId]: snap.val() as ChatRoom }));
-          }
-        })
+        onValue(
+          ref(db, `chats/${cId}`),
+          (snap) => {
+            if (snap.exists() && snap.val() && typeof snap.val() === 'object') {
+              const raw = snap.val() as ChatRoom;
+              setChatRooms((prev) => ({
+                ...prev,
+                [cId]: {
+                  ...raw,
+                  id: raw.id || cId,
+                  members: raw.members && typeof raw.members === 'object' ? raw.members : {},
+                },
+              }));
+            }
+          },
+          () => {}
+        )
       );
 
       unsubs.push(
-        onValue(ref(db, `typing/${cId}`), (snap) => {
-          setTypingMap((prev) => ({
-            ...prev,
-            [cId]: snap.exists() ? snap.val() : {},
-          }));
-        })
+        onValue(
+          ref(db, `typing/${cId}`),
+          (snap) => {
+            setTypingMap((prev) => ({
+              ...prev,
+              [cId]:
+                snap.exists() && snap.val() && typeof snap.val() === 'object' ? snap.val() : {},
+            }));
+          },
+          () => {}
+        )
       );
     });
 
@@ -234,9 +272,10 @@ export const App: React.FC = () => {
     Object.keys(friendsMap).forEach((u) => set.add(u));
     Object.keys(blocksMap).forEach((u) => set.add(u));
     Object.values(userChats).forEach((m) => {
-      if (m.peerUid) set.add(m.peerUid);
+      if (m?.peerUid) set.add(m.peerUid);
     });
     Object.values(chatRooms).forEach((r) => {
+      if (!r || typeof r !== 'object') return;
       Object.keys(r.members || {}).forEach((u) => {
         if (u !== me.uid) set.add(u);
       });
@@ -283,7 +322,8 @@ export const App: React.FC = () => {
 
   const unreadChatsCount = useMemo(
     () =>
-      Object.values(userChats).filter((c) => !c.archived && (c.unreadCount || 0) > 0).length,
+      Object.values(userChats).filter((c) => Boolean(c) && !c.archived && (c.unreadCount || 0) > 0)
+        .length,
     [userChats]
   );
 
@@ -383,8 +423,27 @@ export const App: React.FC = () => {
   // Never show a locked chat that has not been unlocked in this session.
   const visibleChatId =
     activeChatId && !isChatLocked(activeChatId) ? activeChatId : null;
-  const activeRoom = visibleChatId ? chatRooms[visibleChatId] || null : null;
   const activeMeta = visibleChatId ? userChats[visibleChatId] : undefined;
+  const activeRoom: ChatRoom | null = (() => {
+    if (!visibleChatId) return null;
+    if (chatRooms[visibleChatId]) return chatRooms[visibleChatId];
+    if (activeMeta) {
+      const members: Record<string, boolean> = { [me.uid]: true };
+      if (activeMeta.peerUid) {
+        members[activeMeta.peerUid] = true;
+      }
+      return {
+        id: visibleChatId,
+        type: activeMeta.type || 'direct',
+        members,
+        createdBy: me.uid,
+        createdAt: activeMeta.lastMessageAt || 0,
+        updatedAt: activeMeta.lastMessageAt || 0,
+        disappearingTimer: activeMeta.disappearingTimer ?? null,
+      };
+    }
+    return null;
+  })();
   const isLight = theme === 'light';
 
   return (
@@ -463,22 +522,29 @@ export const App: React.FC = () => {
       </div>
 
       <div className={`${visibleChatId ? 'flex' : 'hidden md:flex'} flex-1 h-full min-w-0`}>
-        <ConversationPane
-          me={me}
-          theme="dark"
-          room={activeRoom}
-          meta={activeMeta}
-          usersMap={usersMap}
-          friendsMap={friendsMap}
-          presenceMap={presenceMap}
-          typingEntries={(visibleChatId && typingMap[visibleChatId]) || {}}
-          blocksMap={blocksMap}
-          onBackMobile={() => setActiveChatId(null)}
-          onToggleLock={handleToggleLock}
-          onForwardMessage={(m) => setForwardingMsg(m)}
-          onOpenLightbox={(src, caption, isViewOnce) => setLightbox({ src, caption, isViewOnce })}
-          onToast={showToast}
-        />
+        <ErrorBoundary
+          resetKey={visibleChatId}
+          onReset={() => setActiveChatId(null)}
+          fallbackTitle="Could not display this conversation"
+        >
+          <ConversationPane
+            me={me}
+            theme="dark"
+            selectedChatId={visibleChatId}
+            room={activeRoom}
+            meta={activeMeta}
+            usersMap={usersMap}
+            friendsMap={friendsMap}
+            presenceMap={presenceMap}
+            typingEntries={(visibleChatId && typingMap[visibleChatId]) || {}}
+            blocksMap={blocksMap}
+            onBackMobile={() => setActiveChatId(null)}
+            onToggleLock={handleToggleLock}
+            onForwardMessage={(m) => setForwardingMsg(m)}
+            onOpenLightbox={(src, caption, isViewOnce) => setLightbox({ src, caption, isViewOnce })}
+            onToast={showToast}
+          />
+        </ErrorBoundary>
       </div>
 
       <NewGroupModal
@@ -487,7 +553,9 @@ export const App: React.FC = () => {
         me={me}
         friendsMap={friendsMap}
         usersMap={usersMap}
-        onCreated={(cId) => {
+        onCreated={(cId, createdRoom, createdMeta) => {
+          setChatRooms((prev) => ({ ...prev, [cId]: createdRoom }));
+          setUserChats((prev) => ({ ...prev, [cId]: createdMeta }));
           setActiveChatId(cId);
           setSidebarTab('chats');
         }}

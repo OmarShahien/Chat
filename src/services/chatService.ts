@@ -8,6 +8,7 @@ import {
   remove,
   onValue,
   onDisconnect,
+  runTransaction,
   serverTimestamp,
   increment,
   query,
@@ -29,6 +30,7 @@ import type {
   MediaMeta,
   MediaPayload,
   PollData,
+  MinigameData,
   PinnedMessageSummary,
   TypingEntry,
   BubbleThemeId,
@@ -42,8 +44,25 @@ import {
   getSelfChatId,
   formatDisappearingDuration,
 } from '../utils/formatters';
+import { getMinigameInfo } from '../utils/minigames';
 
 const mediaMemoryCache = new Map<string, MediaPayload>();
+
+function stripUndefinedDeep<T>(value: T): T {
+  if (Array.isArray(value)) {
+    return value.map((item) => stripUndefinedDeep(item)) as unknown as T;
+  }
+  if (value && typeof value === 'object') {
+    const out: Record<string, unknown> = {};
+    Object.entries(value as Record<string, unknown>).forEach(([k, v]) => {
+      if (v !== undefined) {
+        out[k] = stripUndefinedDeep(v);
+      }
+    });
+    return out as T;
+  }
+  return value;
+}
 
 // Track server time offset to eliminate clock skew between clients
 let serverTimeOffset = 0;
@@ -397,13 +416,13 @@ export async function sendFriendRequest(
   const now = Date.now();
   const payload: FriendRequest = {
     fromUid: me.uid,
-    fromName: me.displayName,
-    fromUsername: me.username,
+    fromName: me.displayName || 'User',
+    fromUsername: me.username || '',
     fromPhoto: me.photoURL || '',
-    fromFriendCode: me.friendCode,
+    fromFriendCode: me.friendCode || '',
     toUid: target.uid,
-    toName: target.displayName,
-    toUsername: target.username,
+    toName: target.displayName || 'User',
+    toUsername: target.username || '',
     toPhoto: target.photoURL || '',
     message: note.trim().slice(0, 140),
     createdAt: now,
@@ -582,13 +601,19 @@ export async function ensureDirectChatOpen(me: UserProfile, friendUid: string): 
   return chatId;
 }
 
+export interface CreatedGroupResult {
+  chatId: string;
+  room: ChatRoom;
+  meta: UserChatMeta;
+}
+
 export async function createGroupChat(
   me: UserProfile,
   name: string,
   description: string,
   friendUids: string[],
   photoURL = ''
-): Promise<string> {
+): Promise<CreatedGroupResult> {
   const trimmedName = name.trim();
   if (!trimmedName) {
     throw new Error('Enter a group subject.');
@@ -597,10 +622,13 @@ export async function createGroupChat(
   const newChatRef = push(ref(db, 'chats'));
   const chatId = `grp_${newChatRef.key}`;
   const now = Date.now();
+  const creatorName = me.displayName || 'User';
 
   const members: Record<string, boolean> = { [me.uid]: true };
   for (const fUid of friendUids) {
-    members[fUid] = true;
+    if (fUid) {
+      members[fUid] = true;
+    }
   }
 
   const room: ChatRoom = {
@@ -610,7 +638,7 @@ export async function createGroupChat(
     admins: { [me.uid]: true },
     name: trimmedName,
     description: description.trim(),
-    photoURL,
+    photoURL: photoURL || '',
     createdBy: me.uid,
     createdAt: now,
     updatedAt: now,
@@ -620,27 +648,42 @@ export async function createGroupChat(
 
   const sysMsgRef = push(ref(db, `messages/${chatId}`));
   const sysMsgId = sysMsgRef.key!;
-  const sysText = `${me.displayName} created group "${trimmedName}"`;
+  const sysText = `${creatorName} created group "${trimmedName}"`;
 
-  const updates: Record<string, unknown> = {
-    [`messages/${chatId}/${sysMsgId}`]: {
-      id: sysMsgId,
-      chatId,
-      senderId: me.uid,
-      senderName: me.displayName,
-      type: 'system',
-      text: sysText,
-      createdAt: now,
-      deliveredTo: { [me.uid]: now },
-      seenBy: { [me.uid]: now },
-    } satisfies ChatMessage,
+  const sysMsg: ChatMessage = {
+    id: sysMsgId,
+    chatId,
+    senderId: me.uid,
+    senderName: creatorName,
+    type: 'system',
+    text: sysText,
+    createdAt: now,
+    deliveredTo: { [me.uid]: now },
+    seenBy: { [me.uid]: now },
   };
 
-  Object.keys(members).forEach((memberUid) => {
+  const myMeta: UserChatMeta = {
+    chatId,
+    type: 'group',
+    unreadCount: 0,
+    lastMessageId: sysMsgId,
+    lastMessageText: sysText,
+    lastMessageAt: now,
+    lastMessageSenderId: me.uid,
+    lastMessageType: 'system',
+  };
+
+  const updates: Record<string, unknown> = {
+    [`messages/${chatId}/${sysMsgId}`]: sysMsg,
+    [`userChats/${me.uid}/${chatId}`]: myMeta,
+  };
+
+  const peerUids = Object.keys(members).filter((u) => u !== me.uid);
+  peerUids.forEach((memberUid) => {
     updates[`userChats/${memberUid}/${chatId}`] = {
       chatId,
       type: 'group',
-      unreadCount: memberUid === me.uid ? 0 : 1,
+      unreadCount: 1,
       lastMessageId: sysMsgId,
       lastMessageText: sysText,
       lastMessageAt: now,
@@ -649,8 +692,31 @@ export async function createGroupChat(
     } satisfies UserChatMeta;
   });
 
-  await update(ref(db), updates);
-  return chatId;
+  try {
+    await update(ref(db), updates);
+  } catch {
+    // Fallback if security rules restrict writing to another member's userChats path
+    await update(ref(db), {
+      [`messages/${chatId}/${sysMsgId}`]: sysMsg,
+      [`userChats/${me.uid}/${chatId}`]: myMeta,
+    });
+    await Promise.all(
+      peerUids.map((memberUid) =>
+        set(ref(db, `userChats/${memberUid}/${chatId}`), {
+          chatId,
+          type: 'group',
+          unreadCount: 1,
+          lastMessageId: sysMsgId,
+          lastMessageText: sysText,
+          lastMessageAt: now,
+          lastMessageSenderId: me.uid,
+          lastMessageType: 'system',
+        } satisfies UserChatMeta).catch(() => {})
+      )
+    );
+  }
+
+  return { chatId, room, meta: myMeta };
 }
 
 export async function addMembersToGroup(
@@ -737,6 +803,7 @@ export interface SendMessageOptions {
   mediaDataUrl?: string;
   mediaMeta?: MediaMeta;
   poll?: PollData;
+  game?: MinigameData;
   bubbleTheme?: BubbleThemeId;
   viewOnce?: boolean;
 }
@@ -752,6 +819,7 @@ export async function sendChatMessage(opts: SendMessageOptions): Promise<ChatMes
     mediaDataUrl,
     mediaMeta,
     poll,
+    game,
     bubbleTheme,
     viewOnce,
   } = opts;
@@ -766,7 +834,7 @@ export async function sendChatMessage(opts: SendMessageOptions): Promise<ChatMes
   recordChatTimestamp(chatId, now);
 
   if (chatRoom.type === 'direct') {
-    const peerUid = Object.keys(chatRoom.members).find((u) => u !== sender.uid);
+    const peerUid = Object.keys(chatRoom.members || {}).find((u) => u !== sender.uid);
     if (peerUid) {
       const [blockedByPeer, blockedByMe] = await Promise.all([
         get(ref(db, `blocks/${peerUid}/${sender.uid}`)),
@@ -785,15 +853,15 @@ export async function sendChatMessage(opts: SendMessageOptions): Promise<ChatMes
   if (mediaDataUrl) {
     const mediaRef = push(ref(db, `media/${chatId}`));
     mediaId = mediaRef.key!;
-    const mediaItem: MediaPayload = {
+    const mediaItem = stripUndefinedDeep<MediaPayload>({
       id: mediaId,
       chatId,
       uploaderId: sender.uid,
       mimeType: mediaMeta?.mimeType || 'application/octet-stream',
-      fileName: mediaMeta?.fileName,
+      ...(mediaMeta?.fileName ? { fileName: mediaMeta.fileName } : {}),
       dataUrl: mediaDataUrl,
       createdAt: now,
-    };
+    });
     await set(mediaRef, mediaItem);
     mediaMemoryCache.set(`${chatId}/${mediaId}`, mediaItem);
   }
@@ -810,11 +878,11 @@ export async function sendChatMessage(opts: SendMessageOptions): Promise<ChatMes
     expiresAt = now + chatRoom.disappearingTimer * 1000;
   }
 
-  const message: ChatMessage = {
+  const message = stripUndefinedDeep<ChatMessage>({
     id: messageId,
     chatId,
     senderId: sender.uid,
-    senderName: sender.displayName,
+    senderName: sender.displayName || 'User',
     senderPhoto: sender.photoURL || '',
     type,
     text: text.trim(),
@@ -822,6 +890,7 @@ export async function sendChatMessage(opts: SendMessageOptions): Promise<ChatMes
     ...(mediaId ? { mediaId } : {}),
     ...(mediaMeta ? { mediaMeta } : {}),
     ...(poll ? { poll } : {}),
+    ...(game ? { game } : {}),
     ...(replyTo ? { replyTo } : {}),
     ...(forwarded ? { forwarded: true } : {}),
     ...(viewOnce ? { viewOnce: true } : {}),
@@ -829,9 +898,9 @@ export async function sendChatMessage(opts: SendMessageOptions): Promise<ChatMes
     deliveredTo: { [sender.uid]: now },
     seenBy: { [sender.uid]: now },
     createdAt: now,
-  };
+  });
 
-  const previewText = getMessageSummaryText(type, text.trim(), mediaMeta, poll, viewOnce);
+  const previewText = getMessageSummaryText(type, text.trim(), mediaMeta, poll, viewOnce, game);
 
   const updates: Record<string, unknown> = {
     [`messages/${chatId}/${messageId}`]: message,
@@ -866,7 +935,8 @@ export function getMessageSummaryText(
   text: string,
   mediaMeta?: MediaMeta,
   poll?: PollData,
-  viewOnce?: boolean
+  viewOnce?: boolean,
+  game?: MinigameData
 ): string {
   if (viewOnce) return 'Photo (view once)';
   if (type === 'image') return text || 'Photo';
@@ -878,6 +948,10 @@ export function getMessageSummaryText(
   }
   if (type === 'file') return mediaMeta?.fileName || 'Document';
   if (type === 'poll') return poll?.question || text || 'Poll';
+  if (type === 'game') {
+    const info = getMinigameInfo(game?.kind);
+    return `🎮 ${info.title}`;
+  }
   return text;
 }
 
@@ -922,6 +996,25 @@ export async function deleteMessageForEveryone(chatId: string, messageId: string
     mediaId: null,
     mediaMeta: null,
     poll: null,
+    game: null,
+  });
+}
+
+export async function updateMinigameState(
+  chatId: string,
+  messageId: string,
+  mutator: (current: MinigameData) => MinigameData | null
+): Promise<void> {
+  const gameRef = ref(db, `messages/${chatId}/${messageId}/game`);
+  await runTransaction(gameRef, (current) => {
+    if (!current || typeof current !== 'object') {
+      return current;
+    }
+    const next = mutator(current as MinigameData);
+    if (!next) {
+      return undefined;
+    }
+    return stripUndefinedDeep(next);
   });
 }
 
@@ -971,12 +1064,14 @@ export async function markChatMessagesRead(
   uid: string,
   sendReadReceipts = true
 ): Promise<void> {
+  if (!chatId || !uid) return;
   const now = Date.now();
   const updates: Record<string, unknown> = {
     [`userChats/${uid}/${chatId}/unreadCount`]: 0,
   };
 
   for (const m of messages) {
+    if (!m?.id) continue;
     if (m.senderId === uid) continue;
     if (!m.deliveredTo?.[uid]) {
       updates[`messages/${chatId}/${m.id}/deliveredTo/${uid}`] = now;
@@ -993,15 +1088,20 @@ export async function markBackgroundMessagesDelivered(
   chatId: string,
   uid: string
 ): Promise<void> {
+  if (!chatId || !uid) return;
   const q = query(ref(db, `messages/${chatId}`), orderByChild('createdAt'), limitToLast(20));
   const snap = await get(q);
   if (!snap.exists()) return;
   const now = Date.now();
   const updates: Record<string, unknown> = {};
   snap.forEach((child) => {
-    const msg = child.val() as ChatMessage;
+    const raw = child.val();
+    if (!raw || typeof raw !== 'object') return;
+    const msgId = raw.id || child.key;
+    if (!msgId) return;
+    const msg = raw as ChatMessage;
     if (msg.senderId !== uid && !msg.deliveredTo?.[uid]) {
-      updates[`messages/${chatId}/${msg.id}/deliveredTo/${uid}`] = now;
+      updates[`messages/${chatId}/${msgId}/deliveredTo/${uid}`] = now;
     }
   });
   if (Object.keys(updates).length > 0) {
@@ -1111,17 +1211,34 @@ export function subscribeChatMessages(
   onMessages: (msgs: ChatMessage[]) => void
 ): Unsubscribe {
   const q = query(ref(db, `messages/${chatId}`), orderByChild('createdAt'), limitToLast(150));
-  return onValue(q, (snap) => {
-    const list: ChatMessage[] = [];
-    snap.forEach((child) => {
-      const msg = child.val() as ChatMessage;
-      list.push(msg);
-      if (typeof msg.createdAt === 'number') {
-        recordChatTimestamp(chatId, msg.createdAt);
-      }
-    });
-    sortChatMessages(list);
-    onMessages(list);
-  });
+  return onValue(
+    q,
+    (snap) => {
+      const list: ChatMessage[] = [];
+      snap.forEach((child) => {
+        const raw = child.val();
+        if (!raw || typeof raw !== 'object') return;
+        // Skip partial receipt-only fragments missing message metadata
+        if (!raw.type && !raw.senderId && raw.createdAt === undefined) return;
+        const msg: ChatMessage = {
+          ...(raw as ChatMessage),
+          id: raw.id || child.key || '',
+          chatId: raw.chatId || chatId,
+          type: raw.type || 'text',
+          text: typeof raw.text === 'string' ? raw.text : '',
+        };
+        if (!msg.id) return;
+        list.push(msg);
+        if (typeof msg.createdAt === 'number') {
+          recordChatTimestamp(chatId, msg.createdAt);
+        }
+      });
+      sortChatMessages(list);
+      onMessages(list);
+    },
+    () => {
+      onMessages([]);
+    }
+  );
 }
 
