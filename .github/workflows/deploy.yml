@@ -36,6 +36,19 @@ jobs:
       - name: Build
         run: npm run build
 
+      # Fail loudly instead of publishing a broken page. The repo root index.html
+      # loads /src/main.tsx (the dev entry), so publishing the raw branch shows a
+      # blank screen. Only dist/ contains the compiled bundle the browser can run.
+      - name: Verify build output
+        run: |
+          test -f dist/index.html || { echo "::error::dist/index.html is missing"; exit 1; }
+          grep -q 'assets/' dist/index.html || { echo "::error::dist/index.html does not reference compiled assets"; exit 1; }
+          if grep -q 'src/main.tsx' dist/index.html; then
+            echo "::error::dist/index.html still points at the unbuilt dev entry (src/main.tsx)"
+            exit 1
+          fi
+          echo "Build output OK: $(ls dist/assets | wc -l) asset(s)"
+
       - name: Setup Pages
         uses: actions/configure-pages@v5
 
@@ -47,3 +60,23 @@ jobs:
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
+
+      - name: Verify live site serves the compiled bundle
+        run: |
+          url="${{ steps.deployment.outputs.page_url }}"
+          for attempt in 1 2 3 4 5; do
+            body=$(curl -fsSL "$url?cachebust=$attempt" || true)
+            if echo "$body" | grep -q 'assets/'; then
+              echo "Live site OK: serving compiled bundle from $url"
+              exit 0
+            fi
+            if echo "$body" | grep -q 'src/main.tsx'; then
+              echo "::error::Live site is serving raw source (src/main.tsx). Pages is publishing the branch, not the build artifact."
+              echo "::error::Fix: Settings > Pages > Build and deployment > Source = 'GitHub Actions'."
+              exit 1
+            fi
+            echo "Attempt $attempt: site not updated yet, retrying..."
+            sleep 10
+          done
+          echo "::error::Live site did not serve the compiled bundle from $url"
+          exit 1

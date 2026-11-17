@@ -6,9 +6,50 @@
     <meta name="theme-color" content="#0a1630" />
     <title>Chat Web</title>
     <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ccircle cx='32' cy='32' r='30' fill='%233b82f6'/%3E%3Cpath d='M32 16c-9.4 0-17 6.8-17 15.2 0 3.7 1.5 7.1 4 9.7L17 48l7.7-2.4c2.2.8 4.7 1.2 7.3 1.2 9.4 0 17-6.8 17-15.2S41.4 16 32 16z' fill='%23fff'/%3E%3C/svg%3E" />
+    <style>
+      .boot-fallback { display: none; }
+      .boot-failed .boot-fallback { display: block; }
+      .boot-failed .boot-spinner { display: none; }
+    </style>
   </head>
   <body class="bg-[#0a1630] text-[#eaf2ff] antialiased">
     <div id="root"></div>
+
+    <!--
+      Visible while the app boots, so a failed script load never leaves a blank
+      screen. main.tsx removes this node once React has mounted.
+    -->
+    <div id="boot-screen" style="position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; background: #0a1630; color: #eaf2ff; font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, Roboto, Helvetica, Arial, sans-serif;">
+      <div class="boot-spinner" style="width: 36px; height: 36px; border-radius: 50%; border: 2px solid #3b82f6; border-top-color: transparent; animation: bootspin 0.8s linear infinite;"></div>
+      <p style="margin: 0; font-size: 13.5px; color: #8fa7cc;">Chat Web</p>
+      <div class="boot-fallback" style="max-width: 340px; padding: 0 20px; text-align: center;">
+        <p style="margin: 0 0 6px; font-size: 14px; font-weight: 600;">This build could not start</p>
+        <p style="margin: 0; font-size: 12.5px; line-height: 1.5; color: #8fa7cc;">
+          The page you are viewing is a source checkout, not the compiled app. A working
+          deployment is built with <code>npm run build</code> and published from the
+          <code>dist</code> folder.
+        </p>
+      </div>
+    </div>
+    <style>
+      @keyframes bootspin { to { transform: rotate(360deg); } }
+    </style>
+    <script>
+      // If the app module never runs, tell the user instead of showing nothing.
+      window.__chatBooted = false;
+      function showBootFailure() {
+        if (window.__chatBooted) return;
+        document.body.classList.add('boot-failed');
+      }
+      window.addEventListener('error', function (event) {
+        if (event && event.target && event.target.tagName === 'SCRIPT') showBootFailure();
+      }, true);
+      setTimeout(showBootFailure, 8000);
+      setTimeout(function () {
+        var root = document.getElementById('root');
+        if (root && root.childElementCount === 0) showBootFailure();
+      }, 8000);
+    </script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
