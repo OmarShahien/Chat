@@ -1018,6 +1018,30 @@ export async function updateMinigameState(
   });
 }
 
+export async function joinMinigame(
+  chatId: string,
+  messageId: string,
+  uid: string,
+  displayName: string
+): Promise<boolean> {
+  const gameRef = ref(db, `messages/${chatId}/${messageId}/game`);
+  const result = await runTransaction(gameRef, (current) => {
+    if (!current || typeof current !== 'object') return;
+    const game = current as MinigameData;
+    if (game.mode !== 'pvp' || game.status === 'finished' || game.winner) return;
+    if (uid === game.hostUid) return;
+    if (game.guestUid && game.guestUid !== uid) return;
+    return stripUndefinedDeep({
+      ...game,
+      guestUid: uid,
+      guestName: displayName || 'Player 2',
+      status: game.status === 'waiting' ? 'active' : game.status,
+      updatedAt: Date.now(),
+    });
+  });
+  return result.committed;
+}
+
 export async function deleteMessageForMe(
   chatId: string,
   messageId: string,

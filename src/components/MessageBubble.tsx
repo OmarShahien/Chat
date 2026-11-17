@@ -209,7 +209,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
   const bubbleTheme = getBubbleTheme(senderThemeId);
   const bubbleBg = isMine ? bubbleTheme.outgoingBg : bubbleTheme.incomingBg;
   const timeColor = isMine ? bubbleTheme.outgoingTime : bubbleTheme.incomingTime;
-  const checkColor = bubbleTheme.outgoingCheck;
+  const checkColor = 'text-[#22d3ee] drop-shadow-[0_0_5px_rgba(34,211,238,0.75)]';
 
   const handleOpenViewOnce = async () => {
     let url = mediaUrl;
@@ -540,7 +540,11 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
           {message.editedAt && !message.deletedForEveryone && <span>Edited</span>}
           <span>{formatMessageTime(message.createdAt)}</span>
           {isMine && !message.deletedForEveryone && (
-            <span>
+            <span
+              title={receiptStatus === 'seen' ? 'Read' : receiptStatus === 'delivered' ? 'Delivered' : 'Sent'}
+              aria-label={receiptStatus === 'seen' ? 'Read receipt: read' : receiptStatus === 'delivered' ? 'Read receipt: delivered' : 'Message sent'}
+              className={receiptStatus === 'seen' ? 'text-[#22d3ee]' : receiptStatus === 'delivered' ? 'text-[#60a5fa]' : 'text-white/70'}
+            >
               {receiptStatus === 'seen' ? (
                 <CheckCheck className={`w-4 h-4 ${checkColor}`} />
               ) : receiptStatus === 'delivered' ? (
@@ -589,9 +593,9 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
 
         {!message.deletedForEveryone && (
           <div
-            className={`opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition absolute top-1 ${
-              isMine ? '-left-23' : '-right-23'
-            } flex items-center gap-0.5 px-1.5 py-0.5 rounded-full shadow-md border z-20 ${
+            className={`absolute top-1 ${
+              isMine ? 'left-1 sm:left-auto sm:-left-23' : 'right-1 sm:right-auto sm:-right-23'
+            } flex items-center gap-0.5 px-1.5 py-0.5 rounded-full shadow-md border z-20 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 focus-within:opacity-100 transition ${
               isLight
                 ? 'bg-white border-[#cfdcf0] text-[#4a5f80]'
                 : 'bg-[#16294d] border-[#1d3764] text-[#a9bddb]'

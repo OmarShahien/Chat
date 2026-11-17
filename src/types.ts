@@ -10,7 +10,11 @@ export type WallpaperId =
   | 'deep-ocean'
   | 'warm-sand'
   | 'slate-minimal'
-  | 'royal-plum';
+  | 'royal-plum'
+  | 'aurora-glow'
+  | 'rose-dawn'
+  | 'paper-garden'
+  | 'geometric-night';
 
 export interface UserPrivacySettings {
   readReceipts: boolean;

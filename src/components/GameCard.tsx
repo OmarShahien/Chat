@@ -22,7 +22,7 @@ import type {
   RpsThrow,
   UserProfile,
 } from '../types';
-import { updateMinigameState } from '../services/chatService';
+import { joinMinigame, updateMinigameState } from '../services/chatService';
 import { playUiSound } from '../utils/media';
 import {
   C4_COLS,
@@ -69,6 +69,7 @@ const TicTacToeView: React.FC<SubGameProps> = ({
   chatId,
   messageId,
   game,
+  room,
   me,
   soundEnabled,
   onToast,
@@ -321,6 +322,28 @@ const TicTacToeView: React.FC<SubGameProps> = ({
           </button>
         )}
 
+        {!isFinished && game.mode === 'pvp' && !game.guestUid && Boolean(room.members?.[me.uid]) && !isHost && (
+          <button
+            type="button"
+            disabled={busy}
+            onClick={async () => {
+              setBusy(true);
+              try {
+                const joined = await joinMinigame(chatId, messageId, me.uid, me.displayName);
+                if (!joined) onToast('This game is no longer available to join.');
+              } catch {
+                onToast('Could not join this game. Try again.');
+              } finally {
+                setBusy(false);
+              }
+            }}
+            className="inline-flex items-center gap-1 px-2 py-1 rounded-[7px] bg-[#3b82f6] hover:bg-[#60a5fa] text-white text-[11px] font-medium shrink-0 cursor-pointer transition"
+          >
+            <Users className="w-3 h-3" />
+            Join game
+          </button>
+        )}
+
         {!isFinished && game.mode === 'pvp' && !game.guestUid && isHost && (
           <button
             type="button"
@@ -344,6 +367,7 @@ const ConnectFourView: React.FC<SubGameProps> = ({
   chatId,
   messageId,
   game,
+  room,
   me,
   soundEnabled,
   onToast,
@@ -601,6 +625,28 @@ const ConnectFourView: React.FC<SubGameProps> = ({
           </button>
         )}
 
+        {!isFinished && game.mode === 'pvp' && !game.guestUid && Boolean(room.members?.[me.uid]) && !isHost && (
+          <button
+            type="button"
+            disabled={busy}
+            onClick={async () => {
+              setBusy(true);
+              try {
+                const joined = await joinMinigame(chatId, messageId, me.uid, me.displayName);
+                if (!joined) onToast('This game is no longer available to join.');
+              } catch {
+                onToast('Could not join this game. Try again.');
+              } finally {
+                setBusy(false);
+              }
+            }}
+            className="inline-flex items-center gap-1 px-2 py-1 rounded-[7px] bg-[#3b82f6] hover:bg-[#60a5fa] text-white text-[11px] font-medium shrink-0 cursor-pointer transition"
+          >
+            <Users className="w-3 h-3" />
+            Join game
+          </button>
+        )}
+
         {!isFinished && game.mode === 'pvp' && !game.guestUid && isHost && (
           <button
             type="button"
@@ -624,6 +670,7 @@ const RpsView: React.FC<SubGameProps> = ({
   chatId,
   messageId,
   game,
+  room,
   me,
   soundEnabled,
   onToast,
@@ -909,6 +956,28 @@ const RpsView: React.FC<SubGameProps> = ({
           >
             <RotateCcw className="w-3 h-3" />
             Rematch
+          </button>
+        )}
+
+        {!isFinished && game.mode === 'pvp' && !game.guestUid && Boolean(room.members?.[me.uid]) && !isHost && (
+          <button
+            type="button"
+            disabled={busy}
+            onClick={async () => {
+              setBusy(true);
+              try {
+                const joined = await joinMinigame(chatId, messageId, me.uid, me.displayName);
+                if (!joined) onToast('This game is no longer available to join.');
+              } catch {
+                onToast('Could not join this game. Try again.');
+              } finally {
+                setBusy(false);
+              }
+            }}
+            className="inline-flex items-center gap-1 px-2 py-1 rounded-[7px] bg-[#3b82f6] hover:bg-[#60a5fa] text-white text-[11px] font-medium shrink-0 cursor-pointer transition"
+          >
+            <Users className="w-3 h-3" />
+            Join game
           </button>
         )}
 

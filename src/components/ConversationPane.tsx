@@ -14,6 +14,7 @@ import {
   MoreVertical,
   Pencil,
   Pin,
+  Palette,
   Plus,
   Search,
   Send,
@@ -40,6 +41,7 @@ import {
   pinMessageInChat,
   sendChatMessage,
   setChatDisappearingTimer,
+  updateUserChatFlags,
   setTypingState,
   sortChatMessages,
   subscribeChatMessages,
@@ -58,7 +60,7 @@ import {
   playUiSound,
   type CompressedImageResult,
 } from '../utils/media';
-import { CHAT_WALLPAPER_STYLE } from '../utils/wallpapers';
+import { getChatWallpaperStyle, WALLPAPER_CHOICES } from '../utils/wallpapers';
 import { getMinigameInfo } from '../utils/minigames';
 import { Avatar } from './Avatar';
 import { GameLauncherModal } from './GameCard';
@@ -119,6 +121,7 @@ export const ConversationPane: React.FC<ConversationPaneProps> = ({
   const [gameModalOpen, setGameModalOpen] = useState(false);
   const [infoOpen, setInfoOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
+  const [wallpaperOpen, setWallpaperOpen] = useState(false);
   const [chatSearchQuery, setChatSearchQuery] = useState('');
   const [highlightedId, setHighlightedId] = useState<string | null>(null);
   const [showScrollDown, setShowScrollDown] = useState(false);
@@ -516,6 +519,16 @@ export const ConversationPane: React.FC<ConversationPaneProps> = ({
     playUiSound('send', soundEnabled);
   };
 
+  const handleSelectWallpaper = async (wallpaper: NonNullable<UserChatMeta['wallpaper']>) => {
+    try {
+      await updateUserChatFlags(me.uid, room.id, { wallpaper });
+      setWallpaperOpen(false);
+      onToast('Chat wallpaper updated');
+    } catch {
+      onToast('Could not update chat wallpaper');
+    }
+  };
+
   const handleLaunchGame = async (gameData: MinigameData) => {
     const info = getMinigameInfo(gameData.kind);
     await sendChatMessage({
@@ -663,7 +676,44 @@ export const ConversationPane: React.FC<ConversationPaneProps> = ({
             </div>
           </div>
 
-          <div className="flex items-center gap-1 shrink-0">
+          <div className="flex items-center gap-1 shrink-0 relative">
+            <button
+              onClick={() => setWallpaperOpen((open) => !open)}
+              title="Chat wallpaper"
+              aria-label="Choose chat wallpaper"
+              className={`w-10 h-10 rounded-full flex items-center justify-center transition cursor-pointer ${
+                wallpaperOpen
+                  ? 'text-[#3b82f6] bg-[#3b82f6]/10'
+                  : 'text-[#8fa7cc] hover:text-current hover:bg-black/10'
+              }`}
+            >
+              <Palette className="w-[18px] h-[18px]" />
+            </button>
+            {wallpaperOpen && (
+              <div className={`absolute top-12 right-0 z-40 w-[240px] p-3 rounded-xl border shadow-2xl ${
+                isLight ? 'bg-white border-[#cfdcf0]' : 'bg-[#12254a] border-[#1d3764]'
+              }`}>
+                <p className="text-[12px] font-semibold mb-2.5">Chat wallpaper</p>
+                <div className="grid grid-cols-2 gap-2">
+                  {WALLPAPER_CHOICES.map((choice) => (
+                    <button
+                      key={choice.id}
+                      type="button"
+                      onClick={() => void handleSelectWallpaper(choice.id)}
+                      aria-pressed={(meta?.wallpaper || 'whatsapp-doodle') === choice.id}
+                      className={`group rounded-lg p-1 text-left border transition cursor-pointer ${
+                        (meta?.wallpaper || 'whatsapp-doodle') === choice.id
+                          ? 'border-[#60a5fa] ring-1 ring-[#60a5fa]'
+                          : 'border-transparent hover:border-white/30'
+                      }`}
+                    >
+                      <span className="block h-10 rounded-md border border-white/10" style={{ background: choice.swatch }} />
+                      <span className="block text-[10.5px] mt-1 truncate">{choice.name}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
             <button
               onClick={() => setDisappearingModalOpen(true)}
               title={
@@ -791,7 +841,7 @@ export const ConversationPane: React.FC<ConversationPaneProps> = ({
             const distFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
             setShowScrollDown(distFromBottom > 240);
           }}
-          style={CHAT_WALLPAPER_STYLE}
+          style={getChatWallpaperStyle(meta?.wallpaper, isLight)}
           className="flex-1 overflow-y-auto py-4 space-y-0.5 relative"
         >
           {visibleMessages.map((msg, index) => {
