@@ -22,7 +22,7 @@ export const MINIGAME_CATALOG: MinigameCatalogItem[] = [
     title: 'Tic-Tac-Toe',
     shortTitle: 'Tic-Tac-Toe',
     emoji: '❌',
-    badge: '1v1 · Bot',
+    badge: '1v1',
     description: 'Classic 3×3 tactics. Line up three marks to win the round.',
     category: 'duel',
   },
@@ -31,7 +31,7 @@ export const MINIGAME_CATALOG: MinigameCatalogItem[] = [
     title: 'Connect Four',
     shortTitle: 'Connect 4',
     emoji: '🔴',
-    badge: '1v1 · Bot',
+    badge: '1v1',
     description: 'Drop discs into the 7×6 rack and connect four in any direction.',
     category: 'duel',
   },
@@ -128,58 +128,6 @@ export function checkTicTacToeResult(boardRaw?: string): {
   return { winner: '', winLine: '' };
 }
 
-function minimaxTtt(board: string, isBotTurn: boolean, botMark: 'X' | 'O', humanMark: 'X' | 'O', depth: number): number {
-  const res = checkTicTacToeResult(board);
-  if (res.winner === (botMark === 'X' ? 'p1' : 'p2')) return 10 - depth;
-  if (res.winner === (humanMark === 'X' ? 'p1' : 'p2')) return depth - 10;
-  if (res.winner === 'draw') return 0;
-
-  let best = isBotTurn ? -Infinity : Infinity;
-  const mark = isBotTurn ? botMark : humanMark;
-  for (let idx = 0; idx < 9; idx++) {
-    if (board[idx] !== '.') continue;
-    const next = board.slice(0, idx) + mark + board.slice(idx + 1);
-    const score = minimaxTtt(next, !isBotTurn, botMark, humanMark, depth + 1);
-    best = isBotTurn ? Math.max(best, score) : Math.min(best, score);
-  }
-  return best;
-}
-
-export function chooseTicTacToeBotMove(
-  boardRaw: string,
-  botMark: 'X' | 'O' = 'O',
-  humanMark: 'X' | 'O' = 'X'
-): number {
-  const board = normalizeTttBoard(boardRaw);
-  const available: number[] = [];
-  for (let i = 0; i < 9; i++) {
-    if (board[i] === '.') available.push(i);
-  }
-  if (available.length === 0) return -1;
-
-  // Slight opening variety on the very first bot move so games stay dynamic
-  if (available.length >= 8 && Math.random() < 0.2) {
-    const cornersAndCenter = [0, 2, 4, 6, 8].filter((i) => board[i] === '.');
-    if (cornersAndCenter.length > 0) {
-      return cornersAndCenter[Math.floor(Math.random() * cornersAndCenter.length)];
-    }
-  }
-
-  let bestScore = -Infinity;
-  let bestMoves: number[] = [];
-  for (const idx of available) {
-    const next = board.slice(0, idx) + botMark + board.slice(idx + 1);
-    const score = minimaxTtt(next, false, botMark, humanMark, 0);
-    if (score > bestScore) {
-      bestScore = score;
-      bestMoves = [idx];
-    } else if (score === bestScore) {
-      bestMoves.push(idx);
-    }
-  }
-  return bestMoves[Math.floor(Math.random() * bestMoves.length)];
-}
-
 /* -------------------- 2. Connect Four -------------------- */
 export const C4_ROWS = 6;
 export const C4_COLS = 7;
@@ -247,75 +195,6 @@ export function checkConnectFourResult(boardRaw?: string): {
     return { winner: 'draw', winLine: '' };
   }
   return { winner: '', winLine: '' };
-}
-
-export function chooseConnectFourBotMove(
-  boardRaw: string,
-  botDisc: '1' | '2' = '2',
-  humanDisc: '1' | '2' = '1'
-): number {
-  const board = normalizeC4Board(boardRaw);
-  const validCols: number[] = [];
-  for (let c = 0; c < C4_COLS; c++) {
-    if (board[c] === '.') validCols.push(c);
-  }
-  if (validCols.length === 0) return -1;
-
-  const botWinnerTag = botDisc === '1' ? 'p1' : 'p2';
-  const humanWinnerTag = humanDisc === '1' ? 'p1' : 'p2';
-
-  // 1. Immediate winning move
-  for (const c of validCols) {
-    const dropped = dropConnectFourDisc(board, c, botDisc);
-    if (dropped && checkConnectFourResult(dropped.nextBoard).winner === botWinnerTag) {
-      return c;
-    }
-  }
-
-  // 2. Block opponent's immediate winning move
-  for (const c of validCols) {
-    const dropped = dropConnectFourDisc(board, c, humanDisc);
-    if (dropped && checkConnectFourResult(dropped.nextBoard).winner === humanWinnerTag) {
-      return c;
-    }
-  }
-
-  // 3. Avoid gifting opponent a winning move right above ours, and prefer center + combos
-  let bestCol = validCols[0];
-  let bestScore = -Infinity;
-
-  for (const c of validCols) {
-    const dropped = dropConnectFourDisc(board, c, botDisc)!;
-    let score = (3 - Math.abs(3 - c)) * 4 + Math.random() * 1.5;
-
-    // Check if opponent can immediately win after our drop
-    for (const oppCol of validCols) {
-      const oppDrop = dropConnectFourDisc(dropped.nextBoard, oppCol, humanDisc);
-      if (oppDrop && checkConnectFourResult(oppDrop.nextBoard).winner === humanWinnerTag) {
-        score -= 100;
-      }
-    }
-
-    // Bonus for adjacent friendly discs around our drop
-    const r = Math.floor(dropped.index / C4_COLS);
-    for (let dr = -1; dr <= 1; dr++) {
-      for (let dc = -1; dc <= 1; dc++) {
-        if (dr === 0 && dc === 0) continue;
-        const nr = r + dr;
-        const nc = c + dc;
-        if (nr >= 0 && nr < C4_ROWS && nc >= 0 && nc < C4_COLS) {
-          if (board[nr * C4_COLS + nc] === botDisc) score += 3;
-        }
-      }
-    }
-
-    if (score > bestScore) {
-      bestScore = score;
-      bestCol = c;
-    }
-  }
-
-  return bestCol;
 }
 
 /* -------------------- 3. Rock Paper Scissors -------------------- */
@@ -545,11 +424,7 @@ export function createInitialMinigameData(opts: CreateMinigameOptions): Minigame
     mode,
     hostUid: host.uid,
     hostName,
-    ...(mode === 'bot'
-      ? { guestUid: '__bot__', guestName: 'Bot 🤖' }
-      : mode === 'pass'
-        ? { guestUid: '__pass__', guestName: 'Player 2' }
-        : {}),
+    ...(mode === 'pass' ? { guestUid: '__pass__', guestName: 'Player 2' } : {}),
     status: mode === 'pvp' ? 'waiting' : 'active',
     p1Score: 0,
     p2Score: 0,

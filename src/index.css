@@ -10,6 +10,23 @@
     font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, Roboto, 'Helvetica Neue', Helvetica, Arial, sans-serif;
   }
 
+  /*
+   * On mobile browsers 100vh is the *largest* viewport, so the address bar and
+   * status bar overlap the top of the app and hide the chat back button.
+   * 100dvh tracks the real visible height; the fallbacks keep older browsers
+   * working and env() clears notches / safe areas.
+   */
+  #root {
+    height: 100vh;
+    height: 100dvh;
+    overflow: hidden;
+  }
+
+  body {
+    overscroll-behavior-y: none;
+    -webkit-tap-highlight-color: transparent;
+  }
+
   ::-webkit-scrollbar {
     width: 6px;
     height: 6px;
@@ -83,4 +100,23 @@
 .view-once-shield img {
   pointer-events: none;
   -webkit-user-drag: none;
+}
+
+
+/*
+ * Full-height app shell.
+ * 100vh is the largest viewport on mobile, which pushes the header under the
+ * browser chrome. dvh tracks the visible height instead.
+ */
+.app-viewport {
+  height: 100vh;
+  height: 100dvh;
+  max-height: 100dvh;
+  overflow: hidden;
+}
+
+@supports (height: 100dvh) {
+  .app-viewport {
+    height: 100dvh;
+  }
 }
