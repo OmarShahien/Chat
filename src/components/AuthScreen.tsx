@@ -76,6 +76,16 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
                 Invite code detected: <span className="font-medium">{pendingInviteCode}</span>
               </p>
             )}
+
+            <div className="pt-2 border-t border-[#dde8f8]">
+              <h2 className="text-[13px] font-medium text-[#3b4f73] mb-1.5">Privacy</h2>
+              <ul className="list-disc list-inside space-y-1 text-[12.5px] leading-5 text-[#5c7194]">
+                <li>Sign-in happens on Google's domain; no password is ever entered here.</li>
+                <li>Stored to run the app: display name, email, and the messages you send.</li>
+                <li>No ads, no analytics profiles, no third-party tracking scripts.</li>
+                <li>Messages are readable by the people in your chats only.</li>
+              </ul>
+            </div>
           </div>
 
           {/* Google Sign-In column */}
@@ -88,9 +98,30 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
               <span>{loading ? 'Signing in...' : 'Sign in with Google'}</span>
             </button>
 
-            <p className="text-[13px] text-[#8fa7cc]">
+            <p className="text-[12.5px] leading-5 text-[#5c7194] max-w-[280px]">
+              You'll sign in on Google's own page — Chat Web never sees your Google password.
+            </p>
+
+            <p className="text-[12.5px] text-[#8fa7cc]">
               Your chats and contacts sync automatically
             </p>
+
+            {/* Contact + transparency details, so visitors can confirm who runs this site. */}
+            <div className="w-full max-w-[280px] pt-3 mt-1 border-t border-[#dde8f8] text-[12.5px] leading-5 text-[#8fa7cc] space-y-1">
+              <p>
+                <span className="text-[#5c7194]">Owner:</span>{' '}
+                <a
+                  href="mailto:omarshahieeen@gmail.com"
+                  className="text-[#1d4ed8] hover:underline break-all"
+                >
+                  omarshahieeen@gmail.com
+                </a>
+              </p>
+              <p>
+                A personal project. Sign-in is handled by Firebase Authentication, and your
+                display name, email and messages are stored only to run your chats.
+              </p>
+            </div>
 
             {shownError && (
               <div className="w-full max-w-[260px] text-left rounded-[4px] bg-[#fef2f2] border border-[#fecaca] px-3 py-2.5 text-[12.5px] text-[#991b1b] space-y-1.5">
