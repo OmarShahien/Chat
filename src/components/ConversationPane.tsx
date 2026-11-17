@@ -203,6 +203,47 @@ export const ConversationPane: React.FC<ConversationPaneProps> = ({
     }
   }, [messages.length, room?.id, showScrollDown]);
 
+  /*
+   * Mobile escape hatches.
+   * If the chat header is ever obscured on a small screen the user can still
+   * leave the conversation: swipe right from the left edge (iOS style) or press
+   * the Android hardware back button.
+   */
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    if (!window.matchMedia('(max-width: 767px)').matches) return;
+
+    let startX = 0;
+    let startY = 0;
+    let tracking = false;
+
+    const onTouchStart = (e: TouchEvent) => {
+      const t = e.touches[0];
+      if (!t) return;
+      startX = t.clientX;
+      startY = t.clientY;
+      tracking = startX <= 32; // only from the left edge
+    };
+
+    const onTouchEnd = (e: TouchEvent) => {
+      if (!tracking) return;
+      tracking = false;
+      const t = e.changedTouches[0];
+      if (!t) return;
+      const dx = t.clientX - startX;
+      const dy = Math.abs(t.clientY - startY);
+      if (dx > 70 && dy < 60) onBackMobile();
+    };
+
+    window.addEventListener('touchstart', onTouchStart, { passive: true });
+    window.addEventListener('touchend', onTouchEnd, { passive: true });
+
+    return () => {
+      window.removeEventListener('touchstart', onTouchStart);
+      window.removeEventListener('touchend', onTouchEnd);
+    };
+  }, [room?.id, onBackMobile]);
+
   const visibleMessages = useMemo(() => {
     const clearedAt = meta?.clearedAt || 0;
     const now = Date.now();
@@ -640,7 +681,8 @@ export const ConversationPane: React.FC<ConversationPaneProps> = ({
           <div className="flex items-center gap-2.5 min-w-0 flex-1">
             <button
               onClick={onBackMobile}
-              className="md:hidden p-1.5 rounded-full text-[#8fa7cc] hover:text-current cursor-pointer"
+              aria-label="Back to chats"
+              className="md:hidden -ml-1 w-10 h-10 shrink-0 rounded-full flex items-center justify-center text-[#8fa7cc] hover:text-current cursor-pointer"
             >
               <ArrowLeft className="w-5 h-5" />
             </button>

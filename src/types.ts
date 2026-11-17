@@ -105,7 +105,7 @@ export type MinigameKind =
   | 'memory'
   | 'mathblitz';
 
-export type MinigameMode = 'pvp' | 'bot' | 'pass' | 'party';
+export type MinigameMode = 'pvp' | 'pass' | 'party';
 
 export type RpsThrow = 'rock' | 'paper' | 'scissors';
 

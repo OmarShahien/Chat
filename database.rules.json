@@ -1,0 +1,126 @@
+{
+  "rules": {
+    ".read": false,
+    ".write": false,
+
+    "users": {
+      "$uid": {
+        ".read": "auth != null",
+        ".write": "auth != null && auth.uid === $uid"
+      }
+    },
+
+    "usernames": {
+      ".read": "auth != null",
+      "$username": { ".write": "auth != null" }
+    },
+
+    "emailIndex": {
+      ".read": "auth != null",
+      "$emailKey": { ".write": "auth != null" }
+    },
+
+    "friendCodes": {
+      ".read": "auth != null",
+      "$code": { ".write": "auth != null" }
+    },
+
+    "userChats": {
+      "$uid": {
+        ".read": "auth != null && auth.uid === $uid",
+        ".write": "auth != null && auth.uid === $uid"
+      }
+    },
+
+    "friends": {
+      "$uid": {
+        ".read": "auth != null && auth.uid === $uid",
+        ".write": "auth != null && auth.uid === $uid"
+      }
+    },
+
+    "friendRequests": {
+      "incoming": {
+        "$uid": {
+          ".read": "auth != null && auth.uid === $uid",
+          "$fromUid": { ".write": "auth != null" }
+        }
+      },
+      "outgoing": {
+        "$uid": {
+          ".read": "auth != null && auth.uid === $uid",
+          "$toUid": { ".write": "auth != null" }
+        }
+      }
+    },
+
+    "blocks": {
+      "$uid": {
+        ".read": "auth != null && auth.uid === $uid",
+        ".write": "auth != null && auth.uid === $uid"
+      }
+    },
+
+    "presence": {
+      "$uid": {
+        ".read": "auth != null",
+        ".write": "auth != null && auth.uid === $uid"
+      }
+    },
+
+    "typing": {
+      "$chatId": {
+        ".read": "auth != null",
+        "$uid": { ".write": "auth != null && auth.uid === $uid" }
+      }
+    },
+
+    "chats": {
+      "$chatId": {
+        ".read": "auth != null && (root.child('chats').child($chatId).child('members').child(auth.uid).val() === true || data.child('members').child(auth.uid).val() === true)",
+        ".write": "auth != null && (data.child('members').child(auth.uid).val() === true || newData.child('members').child(auth.uid).val() === true)"
+      }
+    },
+
+    "messages": {
+      "$chatId": {
+        ".read": "auth != null && root.child('chats').child($chatId).child('members').child(auth.uid).val() === true",
+
+        ".write": "auth != null && root.child('chats').child($chatId).child('members').child(auth.uid).val() === true",
+
+        "$messageId": {
+          ".write": "auth != null && root.child('chats').child($chatId).child('members').child(auth.uid).val() === true",
+
+          "game": {
+            ".write": "auth != null && root.child('chats').child($chatId).child('members').child(auth.uid).val() === true"
+          },
+          "reactions": {
+            "$uid": { ".write": "auth != null && auth.uid === $uid" }
+          },
+          "deliveredTo": {
+            "$uid": { ".write": "auth != null && auth.uid === $uid" }
+          },
+          "seenBy": {
+            "$uid": { ".write": "auth != null && auth.uid === $uid" }
+          },
+          "viewedBy": {
+            "$uid": { ".write": "auth != null && auth.uid === $uid" }
+          },
+          "starredBy": {
+            "$uid": { ".write": "auth != null && auth.uid === $uid" }
+          },
+          "deletedFor": {
+            "$uid": { ".write": "auth != null && auth.uid === $uid" }
+          }
+        }
+      }
+    },
+
+    "media": {
+      "$chatId": {
+        ".read": "auth != null && root.child('chats').child($chatId).child('members').child(auth.uid).val() === true",
+        ".write": "auth != null && root.child('chats').child($chatId).child('members').child(auth.uid).val() === true"
+      }
+    }
+  }
+}

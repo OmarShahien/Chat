@@ -1027,28 +1027,73 @@ export async function updateMinigameState(
   return result.committed;
 }
 
+/** Why a game action was refused, so the UI can explain it. */
+export type MinigameJoinResult =
+  | 'joined'
+  | 'already-joined'
+  | 'seat-taken'
+  | 'not-multiplayer'
+  | 'finished'
+  | 'missing'
+  | 'denied';
+
+/**
+ * Claims the open seat in a multiplayer (pvp) minigame.
+ *
+ * Returns a specific reason rather than a bare boolean: "nothing happened" was
+ * the symptom users actually saw, and it gave no clue whether the seat was
+ * taken, the game was over, or the database refused the write.
+ */
 export async function joinMinigame(
   chatId: string,
   messageId: string,
   uid: string,
   displayName: string
-): Promise<boolean> {
+): Promise<MinigameJoinResult> {
   const gameRef = ref(db, `messages/${chatId}/${messageId}/game`);
-  const result = await runTransaction(gameRef, (current) => {
-    if (!current || typeof current !== 'object') return;
-    const game = current as MinigameData;
-    if (game.mode !== 'pvp' || game.status === 'finished' || game.winner) return;
-    if (uid === game.hostUid) return;
-    if (game.guestUid && game.guestUid !== uid) return;
-    return stripUndefinedDeep({
-      ...game,
-      guestUid: uid,
-      guestName: displayName || 'Player 2',
-      status: game.status === 'waiting' ? 'active' : game.status,
-      updatedAt: Date.now(),
+  let reason: MinigameJoinResult = 'missing';
+
+  try {
+    const result = await runTransaction(gameRef, (current) => {
+      if (!current || typeof current !== 'object') {
+        reason = 'missing';
+        return;
+      }
+      const game = current as MinigameData;
+      if (game.mode !== 'pvp') {
+        reason = 'not-multiplayer';
+        return;
+      }
+      if (game.status === 'finished' || game.winner) {
+        reason = 'finished';
+        return;
+      }
+      if (uid === game.hostUid) {
+        reason = 'already-joined';
+        return;
+      }
+      if (game.guestUid) {
+        reason = game.guestUid === uid ? 'already-joined' : 'seat-taken';
+        return;
+      }
+      reason = 'joined';
+      return stripUndefinedDeep({
+        ...game,
+        guestUid: uid,
+        guestName: displayName || 'Player 2',
+        status: 'active',
+        turn: game.turn || 'p1',
+        updatedAt: Date.now(),
+      });
     });
-  });
-  return result.committed;
+
+    if (result.committed) return 'joined';
+    return reason;
+  } catch (err) {
+    const code = (err as { code?: string }).code || '';
+    if (code.includes('permission')) return 'denied';
+    throw err;
+  }
 }
 
 export async function deleteMessageForMe(

@@ -66,3 +66,31 @@ Desktop notifications are off by default and must be enabled in
 notification is raised only when a message arrives for a chat you are not
 currently reading, or while the tab is in the background. The unread count is
 also shown in the tab title.
+
+## Database rules (required for multiplayer games)
+
+`database.rules.json` is the source of truth for the Firebase Realtime Database
+rules; `firebase.json` / `.firebaserc` point the CLI at the `chatt-cdbf2` project.
+
+> **In-chat games need these rules deployed.**
+>
+> A game lives at `messages/<chatId>/<messageId>/game`, and that message is
+> *created by the host*. If the rules only let a message's sender write it, the
+> second player can never claim a seat or make a move — the host can play alone
+> and the join silently fails. The rules here grant any **chat member** write
+> access to the per-message subtrees the app actually uses (receipts, reactions,
+> votes, stars, deleted-for-me, view-once openings and `game`).
+
+Deploy them with:
+
+```bash
+npm i -g firebase-tools
+firebase login
+firebase deploy --only database --project chatt-cdbf2
+```
+
+Or paste the contents of `database.rules.json` into
+**Firebase Console → Realtime Database → Rules → Publish**.
+
+The join flow now reports *why* it failed (`seat-taken`, `finished`, `denied`,
+…) instead of doing nothing, so if a join is refused the toast names the cause.

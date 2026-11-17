@@ -385,6 +385,43 @@ export const App: React.FC = () => {
     [userChats]
   );
 
+  /*
+   * Mobile back navigation.
+   * Opening a chat pushes a history entry so the Android hardware back button
+   * (and browser back gesture) leaves the conversation instead of the site.
+   */
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    const onPopState = () => {
+      setActiveChatId(null);
+    };
+    window.addEventListener('popstate', onPopState);
+    return () => window.removeEventListener('popstate', onPopState);
+  }, []);
+
+  const isNarrowScreen = () =>
+    typeof window !== 'undefined' && window.matchMedia('(max-width: 767px)').matches;
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    if (!activeChatId || !isNarrowScreen()) return;
+    window.history.pushState({ chatId: activeChatId }, '', window.location.href);
+  }, [activeChatId]);
+
+  /*
+   * Leaving a chat on mobile keeps the history stack honest: when a chat was
+   * pushed we step back through it (so the hardware back button does not need a
+   * second press), otherwise we just clear the selection.
+   */
+  const handleBackMobile = () => {
+    if (typeof window !== 'undefined' && window.history.state?.chatId) {
+      window.history.back();
+      return;
+    }
+    setActiveChatId(null);
+  };
+
   // Show the unread count in the browser tab, so background tabs still hint at
   // new messages even when desktop notifications are off.
   useEffect(() => {
@@ -489,7 +526,7 @@ export const App: React.FC = () => {
 
   if (authChecking) {
     return (
-      <div className="h-screen w-screen bg-[#0a1630] text-[#eaf2ff] flex flex-col items-center justify-center gap-3">
+      <div className="app-viewport w-full bg-[#0a1630] text-[#eaf2ff] flex flex-col items-center justify-center gap-3">
         <div className="w-9 h-9 rounded-full border-2 border-[#3b82f6] border-t-transparent animate-spin" />
         <p className="text-[13.5px] text-[#8fa7cc]">Chat Web</p>
       </div>
@@ -533,7 +570,13 @@ export const App: React.FC = () => {
 
   return (
     <div
-      className={`h-screen w-screen overflow-hidden flex ${
+      /*
+       * `h-screen` is 100vh, which on mobile is the *largest* viewport: the
+       * browser chrome then covers the top of the app (and the chat back
+       * button). The `app-viewport` class uses 100dvh so the layout always
+       * fits the visible area.
+       */
+      className={`app-viewport w-full overflow-hidden flex ${
         isLight ? 'bg-[#eaf1fc] text-[#0a1630]' : 'bg-[#08122a] text-[#eaf2ff]'
       }`}
     >
@@ -613,7 +656,7 @@ export const App: React.FC = () => {
       <div className={`${visibleChatId ? 'flex' : 'hidden md:flex'} flex-1 h-full min-w-0`}>
         <ErrorBoundary
           resetKey={visibleChatId}
-          onReset={() => setActiveChatId(null)}
+          onReset={handleBackMobile}
           fallbackTitle="Could not display this conversation"
         >
           <ConversationPane
@@ -627,7 +670,7 @@ export const App: React.FC = () => {
             presenceMap={presenceMap}
             typingEntries={(visibleChatId && typingMap[visibleChatId]) || {}}
             blocksMap={blocksMap}
-            onBackMobile={() => setActiveChatId(null)}
+            onBackMobile={handleBackMobile}
             onToggleLock={handleToggleLock}
             onForwardMessage={(m) => setForwardingMsg(m)}
             onOpenLightbox={(src, caption, isViewOnce) => setLightbox({ src, caption, isViewOnce })}

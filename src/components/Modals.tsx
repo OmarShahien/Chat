@@ -365,7 +365,7 @@ export const ForwardModal: React.FC<ForwardModalProps> = ({
                 getMinigameInfo(message.game.kind).category === 'party'
                   ? 'party'
                   : targetRoom.type === 'self'
-                    ? 'bot'
+                    ? 'pass'
                     : 'pvp',
             })
           : undefined;

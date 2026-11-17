@@ -1,6 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  Bot,
   Delete,
   Eye,
   EyeOff,
@@ -33,8 +32,6 @@ import {
   TTT_EMPTY_BOARD,
   checkConnectFourResult,
   checkTicTacToeResult,
-  chooseConnectFourBotMove,
-  chooseTicTacToeBotMove,
   createInitialMinigameData,
   decodeSecretWord,
   dropConnectFourDisc,
@@ -107,11 +104,29 @@ const TicTacToeView: React.FC<SubGameProps> = ({
     if (busy) return;
     setBusy(true);
     try {
-      const joined = await joinMinigame(chatId, messageId, me.uid, me.displayName);
-      if (joined) {
-        onToast('You joined the game.');
-      } else {
-        onToast('This game is no longer available to join.');
+      const result = await joinMinigame(chatId, messageId, me.uid, me.displayName);
+      switch (result) {
+        case 'joined':
+          onToast('You joined the game.');
+          break;
+        case 'already-joined':
+          onToast('You are already in this game.');
+          break;
+        case 'seat-taken':
+          onToast('Someone else already took the second seat.');
+          break;
+        case 'finished':
+          onToast('This game has already finished.');
+          break;
+        case 'not-multiplayer':
+          onToast('This is a local game, so there is no seat to join.');
+          break;
+        case 'denied':
+          // Distinguishes a database rules problem from a game-state problem.
+          onToast('The server refused the join. Ask the host to resend the game.');
+          break;
+        default:
+          onToast('This game is no longer available to join.');
       }
     } catch {
       onToast('Could not join this game. Try again.');
@@ -120,44 +135,9 @@ const TicTacToeView: React.FC<SubGameProps> = ({
     }
   };
 
-  // Automatic Bot response when it is Bot's turn
-  useEffect(() => {
-    if (game.mode !== 'bot' || isFinished || turn !== 'p2' || !isHost) return;
-    const timer = setTimeout(() => {
-      updateMinigameState(chatId, messageId, (curr) => {
-        if (curr.mode !== 'bot' || curr.status === 'finished' || curr.turn !== 'p2') {
-          return null;
-        }
-        const currBoard = normalizeTttBoard(curr.board);
-        const moveIdx = chooseTicTacToeBotMove(currBoard, 'O', 'X');
-        if (moveIdx < 0 || currBoard[moveIdx] !== '.') return null;
-
-        const nextBoard = currBoard.slice(0, moveIdx) + 'O' + currBoard.slice(moveIdx + 1);
-        const check = checkTicTacToeResult(nextBoard);
-        const finished = Boolean(check.winner);
-
-        return {
-          ...curr,
-          board: nextBoard,
-          lastMoveIndex: moveIdx,
-          turn: finished ? curr.turn : 'p1',
-          status: finished ? 'finished' : 'active',
-          winner: check.winner,
-          winLine: check.winLine,
-          p1Score: (curr.p1Score || 0) + (check.winner === 'p1' ? 1 : 0),
-          p2Score: (curr.p2Score || 0) + (check.winner === 'p2' ? 1 : 0),
-          updatedAt: Date.now(),
-        };
-      }).catch(() => {});
-    }, 320);
-
-    return () => clearTimeout(timer);
-  }, [chatId, messageId, game.mode, isFinished, turn, isHost, board]);
-
   const canClickCell = (idx: number): boolean => {
     if (busy || isFinished || board[idx] !== '.') return false;
     if (game.mode === 'pass') return isHost;
-    if (game.mode === 'bot') return isHost && turn === 'p1';
     if (turn === 'p1') return isHost;
     return isGuest || canJoinAsGuest;
   };
@@ -172,23 +152,15 @@ const TicTacToeView: React.FC<SubGameProps> = ({
         const currBoard = normalizeTttBoard(curr.board);
         if (currBoard[idx] !== '.') return null;
 
-        // Anything other than an explicit 'pvp' behaves as a local game, so a
-        // missing/unknown mode can never lock the player out of their own game.
-        const currMode: MinigameMode = curr.mode === 'pvp' ? 'pvp' : curr.mode === 'bot' ? 'bot' : 'pass';
+        // Anything other than an explicit 'pvp' is a local (pass & play) game,
+        // so a missing/unknown mode can never lock a player out of their game.
+        const currMode: MinigameMode = curr.mode === 'pvp' ? 'pvp' : 'pass';
 
-        let nextGuestUid = curr.guestUid && curr.guestUid !== '__bot__' && curr.guestUid !== '__pass__'
-          ? curr.guestUid
-          : curr.mode === 'bot'
-            ? '__bot__'
-            : curr.mode === 'pass'
-              ? '__pass__'
-              : curr.guestUid;
+        let nextGuestUid = curr.guestUid;
         let nextGuestName = curr.guestName;
 
         if (currMode === 'pass') {
           if (me.uid !== curr.hostUid) return null;
-        } else if (currMode === 'bot') {
-          if (me.uid !== curr.hostUid || currTurn !== 'p1') return null;
         } else {
           // pvp
           if (currTurn === 'p1') {
@@ -260,24 +232,6 @@ const TicTacToeView: React.FC<SubGameProps> = ({
     }
   };
 
-  const handleSwitchToBot = async () => {
-    setBusy(true);
-    try {
-      await updateMinigameState(chatId, messageId, (curr) => {
-        if (curr.guestUid) return null;
-        return {
-          ...curr,
-          mode: 'bot',
-          guestUid: '__bot__',
-          guestName: 'Bot 🤖',
-          status: curr.winner ? 'finished' : 'active',
-          updatedAt: Date.now(),
-        };
-      });
-    } finally {
-      setBusy(false);
-    }
-  };
 
   const p2Label = game.guestName || 'Open Seat';
   let statusText = '';
@@ -289,8 +243,6 @@ const TicTacToeView: React.FC<SubGameProps> = ({
     statusText = `${p2Label} wins!`;
   } else if (turn === 'p1') {
     statusText = isHost ? 'Your turn (X)' : `${game.hostName}'s turn (X)`;
-  } else if (game.mode === 'bot') {
-    statusText = 'Bot is thinking...';
   } else if (!game.guestUid && game.mode === 'pvp') {
     statusText = isHost ? 'Waiting for friend to play O...' : 'Tap any square to join as O!';
   } else {
@@ -345,7 +297,7 @@ const TicTacToeView: React.FC<SubGameProps> = ({
         })}
       </div>
 
-      {/* Status + Rematch / Bot fallback */}
+      {/* Status + Rematch */}
       <div className="flex items-center justify-between gap-2 pt-0.5">
         <span className={`text-[12px] font-medium truncate ${isFinished ? 'text-emerald-300' : 'text-[#b6cae8]'}`}>
           {statusText}
@@ -372,18 +324,6 @@ const TicTacToeView: React.FC<SubGameProps> = ({
           >
             <Users className="w-3 h-3" />
             Join game
-          </button>
-        )}
-
-        {!isFinished && game.mode === 'pvp' && !game.guestUid && isHost && (
-          <button
-            type="button"
-            disabled={busy}
-            onClick={handleSwitchToBot}
-            className="inline-flex items-center gap-1 px-2 py-1 rounded-[7px] bg-white/10 hover:bg-white/20 text-[#dbeafe] text-[11px] shrink-0 cursor-pointer transition"
-          >
-            <Bot className="w-3 h-3" />
-            vs Bot
           </button>
         )}
       </div>
@@ -436,11 +376,29 @@ const ConnectFourView: React.FC<SubGameProps> = ({
     if (busy) return;
     setBusy(true);
     try {
-      const joined = await joinMinigame(chatId, messageId, me.uid, me.displayName);
-      if (joined) {
-        onToast('You joined the game.');
-      } else {
-        onToast('This game is no longer available to join.');
+      const result = await joinMinigame(chatId, messageId, me.uid, me.displayName);
+      switch (result) {
+        case 'joined':
+          onToast('You joined the game.');
+          break;
+        case 'already-joined':
+          onToast('You are already in this game.');
+          break;
+        case 'seat-taken':
+          onToast('Someone else already took the second seat.');
+          break;
+        case 'finished':
+          onToast('This game has already finished.');
+          break;
+        case 'not-multiplayer':
+          onToast('This is a local game, so there is no seat to join.');
+          break;
+        case 'denied':
+          // Distinguishes a database rules problem from a game-state problem.
+          onToast('The server refused the join. Ask the host to resend the game.');
+          break;
+        default:
+          onToast('This game is no longer available to join.');
       }
     } catch {
       onToast('Could not join this game. Try again.');
@@ -449,45 +407,9 @@ const ConnectFourView: React.FC<SubGameProps> = ({
     }
   };
 
-  // Automatic Bot response when it is Bot's turn
-  useEffect(() => {
-    if (game.mode !== 'bot' || isFinished || turn !== 'p2' || !isHost) return;
-    const timer = setTimeout(() => {
-      updateMinigameState(chatId, messageId, (curr) => {
-        if (curr.mode !== 'bot' || curr.status === 'finished' || curr.turn !== 'p2') {
-          return null;
-        }
-        const currBoard = normalizeC4Board(curr.board);
-        const botCol = chooseConnectFourBotMove(currBoard, '2', '1');
-        if (botCol < 0) return null;
-        const dropped = dropConnectFourDisc(currBoard, botCol, '2');
-        if (!dropped) return null;
-
-        const check = checkConnectFourResult(dropped.nextBoard);
-        const finished = Boolean(check.winner);
-
-        return {
-          ...curr,
-          board: dropped.nextBoard,
-          lastMoveIndex: dropped.index,
-          turn: finished ? curr.turn : 'p1',
-          status: finished ? 'finished' : 'active',
-          winner: check.winner,
-          winLine: check.winLine,
-          p1Score: (curr.p1Score || 0) + (check.winner === 'p1' ? 1 : 0),
-          p2Score: (curr.p2Score || 0) + (check.winner === 'p2' ? 1 : 0),
-          updatedAt: Date.now(),
-        };
-      }).catch(() => {});
-    }, 360);
-
-    return () => clearTimeout(timer);
-  }, [chatId, messageId, game.mode, isFinished, turn, isHost, board]);
-
   const isMyTurn = (() => {
     if (busy || isFinished) return false;
     if (game.mode === 'pass') return isHost;
-    if (game.mode === 'bot') return isHost && turn === 'p1';
     if (turn === 'p1') return isHost;
     return isGuest || canJoinAsGuest;
   })();
@@ -501,14 +423,12 @@ const ConnectFourView: React.FC<SubGameProps> = ({
         const currTurn = curr.turn || 'p1';
         const currBoard = normalizeC4Board(curr.board);
 
-        const currMode: MinigameMode = curr.mode === 'pvp' ? 'pvp' : curr.mode === 'bot' ? 'bot' : 'pass';
+        const currMode: MinigameMode = curr.mode === 'pvp' ? 'pvp' : 'pass';
         let nextGuestUid = curr.guestUid;
         let nextGuestName = curr.guestName;
 
         if (currMode === 'pass') {
           if (me.uid !== curr.hostUid) return null;
-        } else if (currMode === 'bot') {
-          if (me.uid !== curr.hostUid || currTurn !== 'p1') return null;
         } else {
           if (currTurn === 'p1') {
             if (me.uid !== curr.hostUid) return null;
@@ -580,24 +500,6 @@ const ConnectFourView: React.FC<SubGameProps> = ({
     }
   };
 
-  const handleSwitchToBot = async () => {
-    setBusy(true);
-    try {
-      await updateMinigameState(chatId, messageId, (curr) => {
-        if (curr.guestUid) return null;
-        return {
-          ...curr,
-          mode: 'bot',
-          guestUid: '__bot__',
-          guestName: 'Bot 🤖',
-          status: curr.winner ? 'finished' : 'active',
-          updatedAt: Date.now(),
-        };
-      });
-    } finally {
-      setBusy(false);
-    }
-  };
 
   const p2Label = game.guestName || 'Open Seat';
   let statusText = '';
@@ -609,8 +511,6 @@ const ConnectFourView: React.FC<SubGameProps> = ({
     statusText = `${p2Label} connected 4!`;
   } else if (turn === 'p1') {
     statusText = isHost ? 'Tap a column to drop 🔴' : `${game.hostName}'s turn 🔴`;
-  } else if (game.mode === 'bot') {
-    statusText = 'Bot is choosing a column...';
   } else if (!game.guestUid && game.mode === 'pvp') {
     statusText = isHost ? 'Waiting for friend to drop 🟡...' : 'Tap a column to join as 🟡!';
   } else {
@@ -698,18 +598,6 @@ const ConnectFourView: React.FC<SubGameProps> = ({
             Join game
           </button>
         )}
-
-        {!isFinished && game.mode === 'pvp' && !game.guestUid && isHost && (
-          <button
-            type="button"
-            disabled={busy}
-            onClick={handleSwitchToBot}
-            className="inline-flex items-center gap-1 px-2 py-1 rounded-[7px] bg-white/10 hover:bg-white/20 text-[#dbeafe] text-[11px] shrink-0 cursor-pointer transition"
-          >
-            <Bot className="w-3 h-3" />
-            vs Bot
-          </button>
-        )}
       </div>
     </div>
   );
@@ -747,11 +635,29 @@ const RpsView: React.FC<SubGameProps> = ({
     if (busy) return;
     setBusy(true);
     try {
-      const joined = await joinMinigame(chatId, messageId, me.uid, me.displayName);
-      if (joined) {
-        onToast('You joined the game.');
-      } else {
-        onToast('This game is no longer available to join.');
+      const result = await joinMinigame(chatId, messageId, me.uid, me.displayName);
+      switch (result) {
+        case 'joined':
+          onToast('You joined the game.');
+          break;
+        case 'already-joined':
+          onToast('You are already in this game.');
+          break;
+        case 'seat-taken':
+          onToast('Someone else already took the second seat.');
+          break;
+        case 'finished':
+          onToast('This game has already finished.');
+          break;
+        case 'not-multiplayer':
+          onToast('This is a local game, so there is no seat to join.');
+          break;
+        case 'denied':
+          // Distinguishes a database rules problem from a game-state problem.
+          onToast('The server refused the join. Ask the host to resend the game.');
+          break;
+        default:
+          onToast('This game is no longer available to join.');
       }
     } catch {
       onToast('Could not join this game. Try again.');
@@ -793,11 +699,7 @@ const RpsView: React.FC<SubGameProps> = ({
         let nextGuestUid = curr.guestUid;
         let nextGuestName = curr.guestName;
 
-        if (curr.mode === 'bot') {
-          if (me.uid !== curr.hostUid) return null;
-          nextP1Pick = choice;
-          nextP2Pick = randomRpsThrow();
-        } else if (curr.mode === 'pass') {
+        if (curr.mode === 'pass') {
           if (me.uid !== curr.hostUid) return null;
           if (!nextP1Pick) {
             nextP1Pick = choice;
@@ -893,49 +795,6 @@ const RpsView: React.FC<SubGameProps> = ({
     }
   };
 
-  const handleSwitchToBot = async () => {
-    setBusy(true);
-    try {
-      await updateMinigameState(chatId, messageId, (curr) => {
-        if (curr.guestUid) return null;
-        if (curr.p1Pick) {
-          const botMove = randomRpsThrow();
-          const roundWinner = resolveRpsWinner(curr.p1Pick, botMove);
-          const nextP1RoundWins = roundWinner === 'p1' ? 1 : 0;
-          const nextP2RoundWins = roundWinner === 'p2' ? 1 : 0;
-          return {
-            ...curr,
-            mode: 'bot',
-            guestUid: '__bot__',
-            guestName: 'Bot 🤖',
-            status: 'active',
-            p1Pick: '',
-            p2Pick: '',
-            p1RoundWins: nextP1RoundWins,
-            p2RoundWins: nextP2RoundWins,
-            roundNumber: 2,
-            lastRound: {
-              round: 1,
-              p1Move: curr.p1Pick,
-              p2Move: botMove,
-              winner: roundWinner,
-            },
-            updatedAt: Date.now(),
-          };
-        }
-        return {
-          ...curr,
-          mode: 'bot',
-          guestUid: '__bot__',
-          guestName: 'Bot 🤖',
-          status: 'active',
-          updatedAt: Date.now(),
-        };
-      });
-    } finally {
-      setBusy(false);
-    }
-  };
 
   return (
     <div className="space-y-2.5">
@@ -1051,18 +910,6 @@ const RpsView: React.FC<SubGameProps> = ({
           >
             <Users className="w-3 h-3" />
             Join game
-          </button>
-        )}
-
-        {!isFinished && game.mode === 'pvp' && !game.guestUid && isHost && (
-          <button
-            type="button"
-            disabled={busy}
-            onClick={handleSwitchToBot}
-            className="inline-flex items-center gap-1 px-2 py-1 rounded-[7px] bg-white/10 hover:bg-white/20 text-[#dbeafe] text-[11px] shrink-0 cursor-pointer transition"
-          >
-            <Bot className="w-3 h-3" />
-            vs Bot
           </button>
         )}
       </div>
@@ -1811,13 +1658,11 @@ export const GameCard: React.FC<GameCardProps> = ({ message, room, me, onToast }
           <div className="min-w-0">
             <p className="text-[13.5px] font-semibold leading-tight truncate">{info.title}</p>
             <p className="text-[10.5px] text-[#8fa7cc] leading-tight">
-              {game.mode === 'bot'
-                ? 'vs Bot 🤖'
-                : game.mode === 'pass'
-                  ? 'Pass & Play'
-                  : game.mode === 'party'
-                    ? 'Chat Challenge'
-                    : 'Multiplayer'}
+              {game.mode === 'pass'
+                ? 'Pass & Play'
+                : game.mode === 'party'
+                  ? 'Chat Challenge'
+                  : 'Multiplayer'}
             </p>
           </div>
         </div>
@@ -1866,14 +1711,14 @@ export const GameLauncherModal: React.FC<GameLauncherModalProps> = ({
 }) => {
   const isSelfChat = room.type === 'self';
   const [selectedKind, setSelectedKind] = useState<MinigameKind>('tictactoe');
-  const [duelMode, setDuelMode] = useState<'pvp' | 'bot' | 'pass'>(isSelfChat ? 'bot' : 'pvp');
+  const [duelMode, setDuelMode] = useState<'pvp' | 'pass'>(isSelfChat ? 'pass' : 'pvp');
   const [wordMode, setWordMode] = useState<'random' | 'custom'>('random');
   const [customWord, setCustomWord] = useState('');
   const [launching, setLaunching] = useState(false);
 
   useEffect(() => {
     if (open) {
-      setDuelMode(isSelfChat ? 'bot' : 'pvp');
+      setDuelMode(isSelfChat ? 'pass' : 'pvp');
       setWordMode('random');
       setCustomWord('');
       setLaunching(false);
@@ -1899,11 +1744,7 @@ export const GameLauncherModal: React.FC<GameLauncherModalProps> = ({
     setLaunching(true);
     try {
       const effectiveMode: MinigameMode =
-        selectedMeta.category === 'party'
-          ? 'party'
-          : isSelfChat && duelMode === 'pvp'
-            ? 'bot'
-            : duelMode;
+        selectedMeta.category === 'party' ? 'party' : isSelfChat ? 'pass' : duelMode;
 
       const gameData = createInitialMinigameData({
         kind: selectedKind,
@@ -2027,20 +1868,6 @@ export const GameLauncherModal: React.FC<GameLauncherModalProps> = ({
                   </button>
                 )}
 
-                <button
-                  type="button"
-                  onClick={() => setDuelMode('bot')}
-                  className={`py-2 px-3 rounded-[8px] border text-[13px] font-medium flex items-center justify-center gap-2 cursor-pointer transition ${
-                    duelMode === 'bot'
-                      ? 'border-[#3b82f6] bg-[#3b82f6] text-white'
-                      : isLight
-                        ? 'border-[#cfdcf0] text-[#34476a]'
-                        : 'border-[#1d3764] bg-[#12254a] text-[#cfe0fa]'
-                  }`}
-                >
-                  <Bot className="w-4 h-4" />
-                  Play vs Bot
-                </button>
               </div>
             </div>
           )}
