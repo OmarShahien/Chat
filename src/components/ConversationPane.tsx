@@ -10,7 +10,6 @@ import {
   Gamepad2,
   Image as ImageIcon,
   Info,
-  Mic,
   Lock,
   MoreVertical,
   Pencil,
@@ -20,7 +19,6 @@ import {
   Search,
   Send,
   Smile,
-  Trash2,
   X,
 } from 'lucide-react';
 import type {
@@ -51,7 +49,6 @@ import { EMOJI_CATEGORIES } from '../utils/emojis';
 import {
   formatDateSeparator,
   formatDisappearingDuration,
-  formatDuration,
   formatLastSeen,
   isSameDay,
 } from '../utils/formatters';
@@ -129,14 +126,6 @@ export const ConversationPane: React.FC<ConversationPaneProps> = ({
   const [highlightedId, setHighlightedId] = useState<string | null>(null);
   const [showScrollDown, setShowScrollDown] = useState(false);
   const [sending, setSending] = useState(false);
-
-  const [recording, setRecording] = useState(false);
-  const [recordSeconds, setRecordSeconds] = useState(0);
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
-  const audioChunksRef = useRef<Blob[]>([]);
-  const recordTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const discardRecordingRef = useRef(false);
-  const recordDurationRef = useRef(0);
 
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const bottomEndRef = useRef<HTMLDivElement>(null);
@@ -284,7 +273,7 @@ export const ConversationPane: React.FC<ConversationPaneProps> = ({
         )
         .map(([uid, entry]) => ({
           uid,
-          state: entry.state === 'recording' ? ('recording' as const) : ('typing' as const),
+          state: 'typing' as const,
           name:
             typeof entry.name === 'string' && entry.name
               ? entry.name
@@ -385,7 +374,7 @@ export const ConversationPane: React.FC<ConversationPaneProps> = ({
       <span className="text-[#3b82f6] flex items-center gap-1 font-medium">
         <span>
           {room.type === 'group' ? `${t.name} is ` : ''}
-          {t.state === 'recording' ? 'recording audio' : 'typing'}
+          typing
         </span>
         <TypingDots size="sm" />
       </span>
@@ -585,86 +574,6 @@ export const ConversationPane: React.FC<ConversationPaneProps> = ({
     playUiSound('send', soundEnabled);
     setShowScrollDown(false);
     setTimeout(() => bottomEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 60);
-  };
-
-  const startVoiceRecording = async () => {
-    if (!navigator.mediaDevices?.getUserMedia) {
-      onToast('Microphone not supported in this browser.');
-      return;
-    }
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const preferredMime = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
-        ? 'audio/webm;codecs=opus'
-        : MediaRecorder.isTypeSupported('audio/mp4')
-          ? 'audio/mp4'
-          : '';
-
-      const recorder = preferredMime
-        ? new MediaRecorder(stream, { mimeType: preferredMime, audioBitsPerSecond: 24000 })
-        : new MediaRecorder(stream);
-
-      audioChunksRef.current = [];
-      discardRecordingRef.current = false;
-      recordDurationRef.current = 0;
-      setRecordSeconds(0);
-      setRecording(true);
-      setTypingState(room.id, me.uid, me.displayName, 'recording');
-
-      recordTimerRef.current = setInterval(() => {
-        recordDurationRef.current += 1;
-        setRecordSeconds(recordDurationRef.current);
-      }, 1000);
-
-      recorder.ondataavailable = (ev) => {
-        if (ev.data.size > 0) audioChunksRef.current.push(ev.data);
-      };
-
-      recorder.onstop = async () => {
-        stream.getTracks().forEach((t) => t.stop());
-        if (recordTimerRef.current) clearInterval(recordTimerRef.current);
-        setRecording(false);
-        setTypingState(room.id, me.uid, me.displayName, null);
-
-        if (discardRecordingRef.current || audioChunksRef.current.length === 0) return;
-
-        const blob = new Blob(audioChunksRef.current, {
-          type: recorder.mimeType || 'audio/webm',
-        });
-        const file = new File([blob], 'voice-note.webm', { type: blob.type });
-        const dataUrl = await fileToDataUrl(file);
-        const waveform = Array.from({ length: 22 }, () => Math.floor(25 + Math.random() * 70));
-
-        await sendChatMessage({
-          chatRoom: room,
-          sender: me,
-          type: 'voice',
-          text: '',
-          mediaDataUrl: dataUrl,
-          mediaMeta: {
-            mimeType: blob.type,
-            durationSec: Math.max(1, recordDurationRef.current),
-            size: blob.size,
-            waveform,
-          },
-        });
-        playUiSound('send', soundEnabled);
-      };
-
-      mediaRecorderRef.current = recorder;
-      recorder.start();
-    } catch {
-      onToast('Microphone access unavailable.');
-    }
-  };
-
-  const stopVoiceRecording = (discard = false) => {
-    discardRecordingRef.current = discard;
-    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
-      mediaRecorderRef.current.stop();
-    } else {
-      setRecording(false);
-    }
   };
 
   return (
@@ -1047,7 +956,7 @@ export const ConversationPane: React.FC<ConversationPaneProps> = ({
                   </span>
                 )}
                 <span className="text-[12px] opacity-80">
-                  {activeTypers[0].state === 'recording' ? 'recording audio' : 'typing'}
+                  typing
                 </span>
                 <TypingDots size="md" />
               </div>
@@ -1317,33 +1226,7 @@ export const ConversationPane: React.FC<ConversationPaneProps> = ({
               : 'bg-[#12254a] text-[#eaf2ff]'
           }`}
         >
-          {recording ? (
-            <div className="flex-1 flex items-center justify-between gap-3 py-1 px-2">
-              <button
-                onClick={() => stopVoiceRecording(true)}
-                title="Delete"
-                className="p-2 rounded-full text-[#8fa7cc] hover:text-[#f15c6d] cursor-pointer"
-              >
-                <Trash2 className="w-5 h-5" />
-              </button>
-
-              <div className="flex items-center gap-2.5">
-                <span className="w-2.5 h-2.5 rounded-full bg-[#f15c6d] animate-pulse" />
-                <span className="font-mono text-[14px]">
-                  {formatDuration(recordSeconds)}
-                </span>
-              </div>
-
-              <button
-                onClick={() => stopVoiceRecording(false)}
-                title="Send"
-                className="w-10 h-10 rounded-full bg-[#3b82f6] hover:bg-[#60a5fa] text-white flex items-center justify-center cursor-pointer"
-              >
-                <Send className="w-4.5 h-4.5" />
-              </button>
-            </div>
-          ) : (
-            <>
+          <>
               <button
                 onClick={() => {
                   setEmojiOpen(!emojiOpen);
@@ -1435,17 +1318,8 @@ export const ConversationPane: React.FC<ConversationPaneProps> = ({
                 >
                   <Send className="w-6 h-6" />
                 </button>
-              ) : (
-                <button
-                  onClick={startVoiceRecording}
-                  title="Voice message"
-                  className="p-2 rounded-full text-[#8fa7cc] hover:text-current shrink-0 transition cursor-pointer"
-                >
-                  <Mic className="w-6 h-6" />
-                </button>
-              )}
-            </>
-          )}
+              ) : null}
+          </>
         </footer>
       </div>
 

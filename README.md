@@ -1,6 +1,6 @@
 # Chat Web
 
-Private real-time web messenger with Google sign-in, contacts, direct & group chats, voice notes, photo/file sharing, and per-chat passcode locks.
+Private real-time web messenger with Google sign-in, contacts, direct & group chats, photo/file sharing, and per-chat passcode locks.
 
 ## Development
 
