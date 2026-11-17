@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   Ban,
   BarChart2,
@@ -11,10 +11,8 @@ import {
   Download,
   FileText,
   MoreHorizontal,
-  Pause,
   Pencil,
   Pin,
-  Play,
   SmilePlus,
   Trash2,
 } from 'lucide-react';
@@ -31,7 +29,6 @@ import {
 } from '../services/chatService';
 import { QUICK_REACTIONS } from '../utils/emojis';
 import {
-  formatDuration,
   formatFileSize,
   formatMessageTime,
   formatRemainingTime,
@@ -95,12 +92,6 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
   const [showReactions, setShowReactions] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
 
-  const audioRef = useRef<HTMLAudioElement | null>(null);
-  const [playing, setPlaying] = useState(false);
-  const [audioProgress, setAudioProgress] = useState(0);
-  const [audioCurrentSec, setAudioCurrentSec] = useState(0);
-  const [playbackRate, setPlaybackRate] = useState<1 | 1.5 | 2>(1);
-
   const isLight = theme === 'light';
   const isMine = message.senderId === me.uid;
 
@@ -163,42 +154,6 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
   });
   const hasReactions = Object.keys(reactionGroups).length > 0;
 
-  const toggleVoicePlay = () => {
-    if (!mediaUrl) return;
-    if (!audioRef.current) {
-      const audio = new Audio(mediaUrl);
-      audio.playbackRate = playbackRate;
-      audio.ontimeupdate = () => {
-        setAudioCurrentSec(audio.currentTime);
-        const dur = audio.duration || message.mediaMeta?.durationSec || 1;
-        setAudioProgress(Math.min(100, (audio.currentTime / dur) * 100));
-      };
-      audio.onended = () => {
-        setPlaying(false);
-        setAudioProgress(0);
-        setAudioCurrentSec(0);
-      };
-      audioRef.current = audio;
-    }
-
-    if (playing) {
-      audioRef.current.pause();
-      setPlaying(false);
-    } else {
-      audioRef.current.playbackRate = playbackRate;
-      audioRef.current.play().catch(() => {});
-      setPlaying(true);
-    }
-  };
-
-  const cyclePlaybackRate = () => {
-    const next: 1 | 1.5 | 2 = playbackRate === 1 ? 1.5 : playbackRate === 1.5 ? 2 : 1;
-    setPlaybackRate(next);
-    if (audioRef.current) {
-      audioRef.current.playbackRate = next;
-    }
-  };
-
   // Sender's chosen bubble theme visible to everyone
   const senderThemeId =
     message.bubbleTheme ||
@@ -250,10 +205,6 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
       onToast('Loading photo...');
     }
   };
-
-  const waveform = message.mediaMeta?.waveform || [
-    28, 52, 40, 74, 90, 56, 38, 68, 85, 48, 62, 78, 44, 34, 65, 82, 50, 42, 60, 35,
-  ];
 
   return (
     <div
@@ -388,57 +339,6 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
                   )}
                 </div>
               )
-            )}
-
-            {message.type === 'voice' && (
-              <div className="flex items-center gap-2.5 py-1 min-w-[220px] sm:min-w-[260px]">
-                <button
-                  onClick={toggleVoicePlay}
-                  disabled={!mediaUrl}
-                  className="w-9 h-9 rounded-full bg-white text-[#1c3a66] flex items-center justify-center shrink-0 hover:bg-[#dbeafe] disabled:opacity-40 cursor-pointer"
-                >
-                  {playing ? (
-                    <Pause className="w-4 h-4 fill-current" />
-                  ) : (
-                    <Play className="w-4 h-4 fill-current ml-0.5" />
-                  )}
-                </button>
-
-                <div className="flex-1 space-y-1">
-                  <div className="flex items-center gap-[3px] h-6">
-                    {waveform.map((bar, idx) => {
-                      const pct = ((idx + 1) / waveform.length) * 100;
-                      const active = pct <= audioProgress;
-                      return (
-                        <span
-                          key={idx}
-                          className={`flex-1 rounded-full transition-colors ${
-                            active
-                              ? 'bg-[#53bdeb]'
-                              : isLight
-                                ? 'bg-[#8fa7cc]/50'
-                                : 'bg-white/30'
-                          }`}
-                          style={{ height: `${Math.max(18, bar)}%` }}
-                        />
-                      );
-                    })}
-                  </div>
-                  <div className="flex items-center justify-between text-[11px] opacity-75">
-                    <span>
-                      {playing || audioCurrentSec > 0
-                        ? formatDuration(audioCurrentSec)
-                        : formatDuration(message.mediaMeta?.durationSec || 0)}
-                    </span>
-                    <button
-                      onClick={cyclePlaybackRate}
-                      className="px-1.5 rounded bg-black/20 font-medium cursor-pointer"
-                    >
-                      {playbackRate}x
-                    </button>
-                  </div>
-                </div>
-              </div>
             )}
 
             {message.type === 'file' && (
