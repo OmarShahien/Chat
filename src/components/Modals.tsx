@@ -453,11 +453,63 @@ export const ImageLightbox: React.FC<{
   isViewOnce?: boolean;
   onClose: () => void;
 }> = ({ src, caption, isViewOnce, onClose }) => {
+  const [warned, setWarned] = useState<string | null>(null);
+
+  /*
+   * A web page cannot truly prevent a screenshot, but for 1-time pictures we
+   * make the obvious capture paths fail: blur the image the moment the tab or
+   * window loses focus (which happens when the screenshot/overlay UI is invoked
+   * on most platforms) and catch the common keyboard shortcuts. We also tell the
+   * user that screenshots are disabled, which deters casual capture.
+   */
+  useEffect(() => {
+    if (!isViewOnce) return;
+
+    const hide = () => document.documentElement.classList.add('view-once-hidden');
+    const show = () => document.documentElement.classList.remove('view-once-hidden');
+
+    const onKeyDown = (e: KeyboardEvent) => {
+      const key = e.key.toLowerCase();
+      const isCaptureCombo =
+        (e.key === 'PrintScreen' || key === 'printscreen') ||
+        (e.metaKey && e.shiftKey && (key === '3' || key === '4' || key === '5')) ||
+        (e.metaKey && e.shiftKey && key === 's') ||
+        (e.ctrlKey && e.shiftKey && (key === 's' || key === 'i' || key === 'j')) ||
+        key === 'f12';
+      if (isCaptureCombo) {
+        e.preventDefault();
+        hide();
+        setWarned('Screenshots are disabled for 1-time pictures.');
+        window.setTimeout(() => setWarned(null), 2200);
+        window.setTimeout(show, 400);
+      }
+    };
+
+    const onContextMenu = (e: MouseEvent) => e.preventDefault();
+
+    window.addEventListener('keydown', onKeyDown, true);
+    window.addEventListener('keyup', onKeyDown, true);
+    window.addEventListener('blur', hide);
+    document.addEventListener('visibilitychange', hide);
+    document.addEventListener('contextmenu', onContextMenu);
+
+    return () => {
+      window.removeEventListener('keydown', onKeyDown, true);
+      window.removeEventListener('keyup', onKeyDown, true);
+      window.removeEventListener('blur', hide);
+      document.removeEventListener('visibilitychange', hide);
+      document.removeEventListener('contextmenu', onContextMenu);
+      document.documentElement.classList.remove('view-once-hidden');
+    };
+  }, [isViewOnce]);
+
   if (!src) return null;
   return (
     <div
       onClick={onClose}
-      className="fixed inset-0 z-50 bg-black/95 flex flex-col justify-between p-4 sm:p-6"
+      className={`fixed inset-0 z-50 bg-black/95 flex flex-col justify-between p-4 sm:p-6 ${
+        isViewOnce ? 'view-once-shield' : ''
+      }`}
     >
       <div className="flex items-center justify-between gap-2" onClick={(e) => e.stopPropagation()}>
         {isViewOnce ? (
@@ -497,9 +549,28 @@ export const ImageLightbox: React.FC<{
           src={src}
           alt={caption || 'Photo'}
           onClick={(e) => e.stopPropagation()}
-          className="max-h-[82vh] max-w-[92vw] object-contain select-none"
+          draggable={false}
+          onDragStart={(e) => e.preventDefault()}
+          className={`max-h-[82vh] max-w-[92vw] object-contain select-none ${
+            isViewOnce ? 'pointer-events-none' : ''
+          }`}
+          style={isViewOnce ? { WebkitTouchCallout: 'none' } : undefined}
         />
       </div>
+
+      {isViewOnce && (
+        <p className="text-center text-[12px] text-white/60 pb-1 select-none">
+          Screenshots are disabled for 1-time pictures.
+        </p>
+      )}
+
+      {warned && (
+        <div className="absolute inset-0 z-10 flex items-center justify-center bg-black/95">
+          <p className="px-6 py-3 rounded-[10px] bg-white/10 text-white text-[14px] text-center">
+            {warned}
+          </p>
+        </div>
+      )}
 
       {caption && (
         <p className="text-center text-[14.5px] text-white/90 max-w-xl mx-auto pb-2">{caption}</p>

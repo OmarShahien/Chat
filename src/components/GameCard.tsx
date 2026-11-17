@@ -76,6 +76,7 @@ const TicTacToeView: React.FC<SubGameProps> = ({
 }) => {
   const [busy, setBusy] = useState(false);
 
+
   const board = normalizeTttBoard(game.board);
   const winIndices = useMemo(
     () =>
@@ -93,6 +94,31 @@ const TicTacToeView: React.FC<SubGameProps> = ({
   const canJoinAsGuest = game.mode === 'pvp' && !game.guestUid && !isHost;
   const turn = game.turn || 'p1';
   const isFinished = game.status === 'finished' || Boolean(game.winner);
+
+  /*
+   * Joining used to require `room.members[me.uid]`, but the room snapshot can be
+   * missing or stale while a chat loads, so the Join button looked permanently
+   * disabled ("can't join a seat"). Membership is already enforced by the
+   * database rules, so the button now only depends on the game state.
+   */
+  const canOfferJoin = game.mode === 'pvp' && !game.guestUid && !isHost && !isFinished;
+
+  const handleJoinAsPlayer = async () => {
+    if (busy) return;
+    setBusy(true);
+    try {
+      const joined = await joinMinigame(chatId, messageId, me.uid, me.displayName);
+      if (joined) {
+        onToast('You joined the game.');
+      } else {
+        onToast('This game is no longer available to join.');
+      }
+    } catch {
+      onToast('Could not join this game. Try again.');
+    } finally {
+      setBusy(false);
+    }
+  };
 
   // Automatic Bot response when it is Bot's turn
   useEffect(() => {
@@ -140,22 +166,33 @@ const TicTacToeView: React.FC<SubGameProps> = ({
     if (!canClickCell(idx)) return;
     setBusy(true);
     try {
-      await updateMinigameState(chatId, messageId, (curr) => {
+      const committed = await updateMinigameState(chatId, messageId, (curr) => {
         if (curr.status === 'finished' || curr.winner) return null;
         const currTurn = curr.turn || 'p1';
         const currBoard = normalizeTttBoard(curr.board);
         if (currBoard[idx] !== '.') return null;
 
-        let nextGuestUid = curr.guestUid;
+        // Anything other than an explicit 'pvp' behaves as a local game, so a
+        // missing/unknown mode can never lock the player out of their own game.
+        const currMode: MinigameMode = curr.mode === 'pvp' ? 'pvp' : curr.mode === 'bot' ? 'bot' : 'pass';
+
+        let nextGuestUid = curr.guestUid && curr.guestUid !== '__bot__' && curr.guestUid !== '__pass__'
+          ? curr.guestUid
+          : curr.mode === 'bot'
+            ? '__bot__'
+            : curr.mode === 'pass'
+              ? '__pass__'
+              : curr.guestUid;
         let nextGuestName = curr.guestName;
 
-        if (curr.mode === 'pass') {
+        if (currMode === 'pass') {
           if (me.uid !== curr.hostUid) return null;
-        } else if (curr.mode === 'bot') {
+        } else if (currMode === 'bot') {
           if (me.uid !== curr.hostUid || currTurn !== 'p1') return null;
         } else {
           // pvp
           if (currTurn === 'p1') {
+            // The host always holds seat p1.
             if (me.uid !== curr.hostUid) return null;
           } else {
             if (!nextGuestUid) {
@@ -188,7 +225,11 @@ const TicTacToeView: React.FC<SubGameProps> = ({
           updatedAt: Date.now(),
         };
       });
-      playUiSound('send', soundEnabled);
+      if (!committed) {
+        onToast(isFinished ? 'This game has already finished.' : "It's not your turn yet.");
+      } else {
+        playUiSound('send', soundEnabled);
+      }
     } catch {
       onToast('Could not make move');
     } finally {
@@ -322,21 +363,11 @@ const TicTacToeView: React.FC<SubGameProps> = ({
           </button>
         )}
 
-        {!isFinished && game.mode === 'pvp' && !game.guestUid && Boolean(room.members?.[me.uid]) && !isHost && (
+        {canOfferJoin && (
           <button
             type="button"
             disabled={busy}
-            onClick={async () => {
-              setBusy(true);
-              try {
-                const joined = await joinMinigame(chatId, messageId, me.uid, me.displayName);
-                if (!joined) onToast('This game is no longer available to join.');
-              } catch {
-                onToast('Could not join this game. Try again.');
-              } finally {
-                setBusy(false);
-              }
-            }}
+            onClick={handleJoinAsPlayer}
             className="inline-flex items-center gap-1 px-2 py-1 rounded-[7px] bg-[#3b82f6] hover:bg-[#60a5fa] text-white text-[11px] font-medium shrink-0 cursor-pointer transition"
           >
             <Users className="w-3 h-3" />
@@ -374,6 +405,7 @@ const ConnectFourView: React.FC<SubGameProps> = ({
 }) => {
   const [busy, setBusy] = useState(false);
 
+
   const board = normalizeC4Board(game.board);
   const winIndices = useMemo(
     () =>
@@ -391,6 +423,31 @@ const ConnectFourView: React.FC<SubGameProps> = ({
   const canJoinAsGuest = game.mode === 'pvp' && !game.guestUid && !isHost;
   const turn = game.turn || 'p1';
   const isFinished = game.status === 'finished' || Boolean(game.winner);
+
+  /*
+   * Joining used to require `room.members[me.uid]`, but the room snapshot can be
+   * missing or stale while a chat loads, so the Join button looked permanently
+   * disabled ("can't join a seat"). Membership is already enforced by the
+   * database rules, so the button now only depends on the game state.
+   */
+  const canOfferJoin = game.mode === 'pvp' && !game.guestUid && !isHost && !isFinished;
+
+  const handleJoinAsPlayer = async () => {
+    if (busy) return;
+    setBusy(true);
+    try {
+      const joined = await joinMinigame(chatId, messageId, me.uid, me.displayName);
+      if (joined) {
+        onToast('You joined the game.');
+      } else {
+        onToast('This game is no longer available to join.');
+      }
+    } catch {
+      onToast('Could not join this game. Try again.');
+    } finally {
+      setBusy(false);
+    }
+  };
 
   // Automatic Bot response when it is Bot's turn
   useEffect(() => {
@@ -439,17 +496,18 @@ const ConnectFourView: React.FC<SubGameProps> = ({
     if (!isMyTurn || board[col] !== '.') return;
     setBusy(true);
     try {
-      await updateMinigameState(chatId, messageId, (curr) => {
+      const committed = await updateMinigameState(chatId, messageId, (curr) => {
         if (curr.status === 'finished' || curr.winner) return null;
         const currTurn = curr.turn || 'p1';
         const currBoard = normalizeC4Board(curr.board);
 
+        const currMode: MinigameMode = curr.mode === 'pvp' ? 'pvp' : curr.mode === 'bot' ? 'bot' : 'pass';
         let nextGuestUid = curr.guestUid;
         let nextGuestName = curr.guestName;
 
-        if (curr.mode === 'pass') {
+        if (currMode === 'pass') {
           if (me.uid !== curr.hostUid) return null;
-        } else if (curr.mode === 'bot') {
+        } else if (currMode === 'bot') {
           if (me.uid !== curr.hostUid || currTurn !== 'p1') return null;
         } else {
           if (currTurn === 'p1') {
@@ -487,7 +545,11 @@ const ConnectFourView: React.FC<SubGameProps> = ({
           updatedAt: Date.now(),
         };
       });
-      playUiSound('send', soundEnabled);
+      if (!committed) {
+        onToast(isFinished ? 'This game has already finished.' : 'That column is full or it is not your turn.');
+      } else {
+        playUiSound('send', soundEnabled);
+      }
     } catch {
       onToast('Could not drop disc');
     } finally {
@@ -625,21 +687,11 @@ const ConnectFourView: React.FC<SubGameProps> = ({
           </button>
         )}
 
-        {!isFinished && game.mode === 'pvp' && !game.guestUid && Boolean(room.members?.[me.uid]) && !isHost && (
+        {canOfferJoin && (
           <button
             type="button"
             disabled={busy}
-            onClick={async () => {
-              setBusy(true);
-              try {
-                const joined = await joinMinigame(chatId, messageId, me.uid, me.displayName);
-                if (!joined) onToast('This game is no longer available to join.');
-              } catch {
-                onToast('Could not join this game. Try again.');
-              } finally {
-                setBusy(false);
-              }
-            }}
+            onClick={handleJoinAsPlayer}
             className="inline-flex items-center gap-1 px-2 py-1 rounded-[7px] bg-[#3b82f6] hover:bg-[#60a5fa] text-white text-[11px] font-medium shrink-0 cursor-pointer transition"
           >
             <Users className="w-3 h-3" />
@@ -677,10 +729,36 @@ const RpsView: React.FC<SubGameProps> = ({
 }) => {
   const [busy, setBusy] = useState(false);
 
+
   const isHost = me.uid === game.hostUid;
   const isGuest = Boolean(game.guestUid && me.uid === game.guestUid);
   const canJoinAsGuest = game.mode === 'pvp' && !game.guestUid && !isHost;
   const isFinished = game.status === 'finished' || Boolean(game.winner);
+
+  /*
+   * Joining used to require `room.members[me.uid]`, but the room snapshot can be
+   * missing or stale while a chat loads, so the Join button looked permanently
+   * disabled ("can't join a seat"). Membership is already enforced by the
+   * database rules, so the button now only depends on the game state.
+   */
+  const canOfferJoin = game.mode === 'pvp' && !game.guestUid && !isHost && !isFinished;
+
+  const handleJoinAsPlayer = async () => {
+    if (busy) return;
+    setBusy(true);
+    try {
+      const joined = await joinMinigame(chatId, messageId, me.uid, me.displayName);
+      if (joined) {
+        onToast('You joined the game.');
+      } else {
+        onToast('This game is no longer available to join.');
+      }
+    } catch {
+      onToast('Could not join this game. Try again.');
+    } finally {
+      setBusy(false);
+    }
+  };
 
   const p1Wins = game.p1RoundWins || 0;
   const p2Wins = game.p2RoundWins || 0;
@@ -693,8 +771,9 @@ const RpsView: React.FC<SubGameProps> = ({
       return !game.p1Pick ? 'p1' : 'p2';
     }
     if (isHost) return 'p1';
-    if (isGuest || canJoinAsGuest) return 'p2';
-    return null;
+    if (isGuest) return 'p2';
+    // An open seat: any non-host in the chat can claim it by throwing.
+    return canJoinAsGuest ? 'p2' : null;
   })();
 
   const myCurrentPick =
@@ -706,7 +785,7 @@ const RpsView: React.FC<SubGameProps> = ({
 
     setBusy(true);
     try {
-      await updateMinigameState(chatId, messageId, (curr) => {
+      const committed = await updateMinigameState(chatId, messageId, (curr) => {
         if (curr.status === 'finished' || curr.winner) return null;
 
         let nextP1Pick: RpsThrow | '' = curr.p1Pick || '';
@@ -783,7 +862,11 @@ const RpsView: React.FC<SubGameProps> = ({
           updatedAt: Date.now(),
         };
       });
-      playUiSound('send', soundEnabled);
+      if (!committed) {
+        onToast(isFinished ? 'This match has already finished.' : 'That throw was not accepted. Try again.');
+      } else {
+        playUiSound('send', soundEnabled);
+      }
     } catch {
       onToast('Could not submit throw');
     } finally {
@@ -959,21 +1042,11 @@ const RpsView: React.FC<SubGameProps> = ({
           </button>
         )}
 
-        {!isFinished && game.mode === 'pvp' && !game.guestUid && Boolean(room.members?.[me.uid]) && !isHost && (
+        {canOfferJoin && (
           <button
             type="button"
             disabled={busy}
-            onClick={async () => {
-              setBusy(true);
-              try {
-                const joined = await joinMinigame(chatId, messageId, me.uid, me.displayName);
-                if (!joined) onToast('This game is no longer available to join.');
-              } catch {
-                onToast('Could not join this game. Try again.');
-              } finally {
-                setBusy(false);
-              }
-            }}
+            onClick={handleJoinAsPlayer}
             className="inline-flex items-center gap-1 px-2 py-1 rounded-[7px] bg-[#3b82f6] hover:bg-[#60a5fa] text-white text-[11px] font-medium shrink-0 cursor-pointer transition"
           >
             <Users className="w-3 h-3" />

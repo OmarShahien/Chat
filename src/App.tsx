@@ -23,6 +23,12 @@ import {
 } from './services/chatService';
 import { hashChatPasscode } from './utils/chatLock';
 import { playUiSound } from './utils/media';
+import {
+  getNotificationPermission,
+  notificationsSupported,
+  requestNotificationPermission,
+  showMessageNotification,
+} from './utils/notifications';
 import { AuthScreen } from './components/AuthScreen';
 import { ChatListPane } from './components/ChatListPane';
 import { ConversationPane } from './components/ConversationPane';
@@ -72,12 +78,25 @@ export const App: React.FC = () => {
     return params.get('invite') || params.get('add');
   });
 
+  const [notificationsEnabled, setNotificationsEnabled] = useState(false);
+  const [notificationPermission, setNotificationPermission] = useState(() =>
+    getNotificationPermission()
+  );
+
   const prevLastMsgIdMapRef = useRef<Record<string, string>>({});
   const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const activeChatIdRef = useRef<string | null>(null);
   const soundEnabledRef = useRef<boolean>(true);
+  const notificationsEnabledRef = useRef<boolean>(false);
+  // Live mirrors of state needed by the realtime callbacks below without
+  // forcing those subscriptions to re-run.
+  const chatRoomsRef = useRef<Record<string, ChatRoom>>({});
+  const usersMapRef = useRef<Record<string, UserProfile>>({});
   activeChatIdRef.current = activeChatId;
   soundEnabledRef.current = me?.privacy?.soundEnabled ?? true;
+  notificationsEnabledRef.current = notificationsEnabled;
+  chatRoomsRef.current = chatRooms;
+  usersMapRef.current = usersMap;
 
   const showToast = useCallback((msg: string) => {
     setToastMsg(msg);
@@ -177,6 +196,45 @@ export const App: React.FC = () => {
             }
             if (activeChatIdRef.current !== meta.chatId) {
               markBackgroundMessagesDelivered(meta.chatId, me.uid);
+            }
+
+            /*
+             * Notify when the message is for a chat the user is not reading, or
+             * when the tab is in the background. Repeat messages from the same
+             * chat collapse into one notification via the `tag`.
+             */
+            const isReadingThisChat =
+              activeChatIdRef.current === meta.chatId &&
+              typeof document !== 'undefined' &&
+              document.visibilityState === 'visible';
+
+            if (notificationsEnabledRef.current && !isReadingThisChat) {
+              const room = chatRoomsRef.current[meta.chatId];
+              const isGroup = meta.type === 'group' || room?.type === 'group';
+              const senderUid = meta.lastMessageSenderId || '';
+              const sender = senderUid ? usersMapRef.current[senderUid] : undefined;
+              const senderName = sender?.displayName;
+
+              const otherUid =
+                meta.peerUid ||
+                Object.keys(room?.members || {}).find((uid) => uid !== me.uid) ||
+                '';
+              const otherName = otherUid ? usersMapRef.current[otherUid]?.displayName : undefined;
+              const otherPhoto = otherUid ? usersMapRef.current[otherUid]?.photoURL : undefined;
+
+              const title = isGroup
+                ? senderName
+                  ? `${room?.name || 'Group chat'} · ${senderName}`
+                  : room?.name || 'Group chat'
+                : otherName || senderName || 'New message';
+
+              showMessageNotification({
+                title,
+                body: meta.lastMessageText || 'Sent you a message',
+                tag: `chat-${meta.chatId}`,
+                icon: isGroup ? sender?.photoURL || undefined : otherPhoto || undefined,
+                onClick: () => setActiveChatId(meta.chatId),
+              });
             }
           }
           if (meta.lastMessageId) {
@@ -327,6 +385,12 @@ export const App: React.FC = () => {
     [userChats]
   );
 
+  // Show the unread count in the browser tab, so background tabs still hint at
+  // new messages even when desktop notifications are off.
+  useEffect(() => {
+    document.title = unreadChatsCount > 0 ? `(${unreadChatsCount}) Chat Web` : 'Chat Web';
+  }, [unreadChatsCount]);
+
   const incomingRequestsCount = useMemo(
     () => Object.keys(incomingRequests).length,
     [incomingRequests]
@@ -393,6 +457,27 @@ export const App: React.FC = () => {
     await signOut(auth);
     setActiveChatId(null);
     setUnlockedChats({});
+  };
+
+  const handleToggleNotifications = async (next: boolean) => {
+    if (!next) {
+      setNotificationsEnabled(false);
+      return;
+    }
+    const permission = await requestNotificationPermission();
+    setNotificationPermission(permission);
+    if (permission === 'granted') {
+      setNotificationsEnabled(true);
+      showMessageNotification({
+        title: 'Notifications on',
+        body: "You'll be notified about new messages.",
+        tag: 'chat-notifications-on',
+      });
+    } else if (permission === 'denied') {
+      showToast('Notifications are blocked in your browser settings.');
+    } else if (permission === 'unsupported') {
+      showToast('This browser does not support notifications.');
+    }
   };
 
   const handleChangeTheme = async (next: ThemeMode) => {
@@ -517,6 +602,10 @@ export const App: React.FC = () => {
             onChangeTheme={handleChangeTheme}
             onSignOut={handleSignOut}
             onToast={showToast}
+            notificationsEnabled={notificationsEnabled}
+            notificationPermission={notificationPermission}
+            notificationsSupported={notificationsSupported()}
+            onToggleNotifications={handleToggleNotifications}
           />
         )}
       </div>

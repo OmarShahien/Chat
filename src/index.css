@@ -61,3 +61,26 @@
   animation: typingBounce 1.4s infinite ease-in-out;
   animation-delay: 0.4s;
 }
+
+/*
+ * 1-time pictures ("view once").
+ * A web page cannot block the OS screenshot itself, so we make the capture
+ * useless: the picture is blurred the instant the window loses focus (which is
+ * when screenshot overlays appear) and the browser context menu / drag / text
+ * selection are disabled inside the shield.
+ */
+.view-once-shield {
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+
+.view-once-hidden .view-once-shield img {
+  filter: blur(48px) brightness(0.2);
+  transition: filter 0s;
+}
+
+.view-once-shield img {
+  pointer-events: none;
+  -webkit-user-drag: none;
+}

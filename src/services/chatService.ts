@@ -1000,13 +1000,21 @@ export async function deleteMessageForEveryone(chatId: string, messageId: string
   });
 }
 
+/**
+ * Applies a move to a minigame inside a Firebase transaction.
+ *
+ * Returns `true` only when the new state was actually written. A `false` result
+ * means the mutator declined the change (not this player's turn, seat already
+ * taken, game over) so the UI can explain what happened instead of silently
+ * doing nothing.
+ */
 export async function updateMinigameState(
   chatId: string,
   messageId: string,
   mutator: (current: MinigameData) => MinigameData | null
-): Promise<void> {
+): Promise<boolean> {
   const gameRef = ref(db, `messages/${chatId}/${messageId}/game`);
-  await runTransaction(gameRef, (current) => {
+  const result = await runTransaction(gameRef, (current) => {
     if (!current || typeof current !== 'object') {
       return current;
     }
@@ -1016,6 +1024,7 @@ export async function updateMinigameState(
     }
     return stripUndefinedDeep(next);
   });
+  return result.committed;
 }
 
 export async function joinMinigame(

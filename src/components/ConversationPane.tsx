@@ -9,6 +9,7 @@ import {
   FileText,
   Gamepad2,
   Image as ImageIcon,
+  Info,
   Mic,
   Lock,
   MoreVertical,
@@ -122,6 +123,8 @@ export const ConversationPane: React.FC<ConversationPaneProps> = ({
   const [infoOpen, setInfoOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [wallpaperOpen, setWallpaperOpen] = useState(false);
+  // Mobile header: the per-action icons collapse into one overflow menu.
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [chatSearchQuery, setChatSearchQuery] = useState('');
   const [highlightedId, setHighlightedId] = useState<string | null>(null);
   const [showScrollDown, setShowScrollDown] = useState(false);
@@ -681,7 +684,7 @@ export const ConversationPane: React.FC<ConversationPaneProps> = ({
               onClick={() => setWallpaperOpen((open) => !open)}
               title="Chat wallpaper"
               aria-label="Choose chat wallpaper"
-              className={`w-10 h-10 rounded-full flex items-center justify-center transition cursor-pointer ${
+              className={`hidden sm:flex w-10 h-10 rounded-full items-center justify-center transition cursor-pointer ${
                 wallpaperOpen
                   ? 'text-[#3b82f6] bg-[#3b82f6]/10'
                   : 'text-[#8fa7cc] hover:text-current hover:bg-black/10'
@@ -690,7 +693,9 @@ export const ConversationPane: React.FC<ConversationPaneProps> = ({
               <Palette className="w-[18px] h-[18px]" />
             </button>
             {wallpaperOpen && (
-              <div className={`absolute top-12 right-0 z-40 w-[240px] p-3 rounded-xl border shadow-2xl ${
+              <>
+              <div className="sm:hidden fixed inset-0 z-30" onClick={() => setWallpaperOpen(false)} />
+              <div className={`absolute top-12 right-0 z-40 w-[240px] max-w-[calc(100vw-24px)] p-3 rounded-xl border shadow-2xl ${
                 isLight ? 'bg-white border-[#cfdcf0]' : 'bg-[#12254a] border-[#1d3764]'
               }`}>
                 <p className="text-[12px] font-semibold mb-2.5">Chat wallpaper</p>
@@ -713,6 +718,7 @@ export const ConversationPane: React.FC<ConversationPaneProps> = ({
                   ))}
                 </div>
               </div>
+              </>
             )}
             <button
               onClick={() => setDisappearingModalOpen(true)}
@@ -721,7 +727,7 @@ export const ConversationPane: React.FC<ConversationPaneProps> = ({
                   ? `Disappearing messages: ${formatDisappearingDuration(room.disappearingTimer)}`
                   : 'Disappearing messages'
               }
-              className={`w-10 h-10 rounded-full flex items-center justify-center transition cursor-pointer relative ${
+              className={`hidden sm:flex w-10 h-10 rounded-full items-center justify-center transition cursor-pointer relative ${
                 room.disappearingTimer && room.disappearingTimer > 0
                   ? 'text-[#3b82f6] bg-[#3b82f6]/10 hover:bg-[#3b82f6]/20'
                   : 'text-[#8fa7cc] hover:text-current hover:bg-black/10'
@@ -737,7 +743,7 @@ export const ConversationPane: React.FC<ConversationPaneProps> = ({
               <button
                 onClick={() => onToggleLock(room.id)}
                 title={meta.lockHash ? 'Remove chat lock' : 'Lock chat'}
-                className={`w-10 h-10 rounded-full flex items-center justify-center transition cursor-pointer ${
+                className={`hidden sm:flex w-10 h-10 rounded-full items-center justify-center transition cursor-pointer ${
                   meta.lockHash
                     ? 'text-[#3b82f6] bg-black/10'
                     : 'text-[#8fa7cc] hover:text-current hover:bg-black/10'
@@ -753,7 +759,7 @@ export const ConversationPane: React.FC<ConversationPaneProps> = ({
                 setChatSearchQuery('');
               }}
               title="Search"
-              className={`w-10 h-10 rounded-full flex items-center justify-center transition cursor-pointer ${
+              className={`hidden sm:flex w-10 h-10 rounded-full items-center justify-center transition cursor-pointer ${
                 searchOpen
                   ? 'text-[#3b82f6] bg-black/10'
                   : 'text-[#8fa7cc] hover:text-current hover:bg-black/10'
@@ -765,7 +771,7 @@ export const ConversationPane: React.FC<ConversationPaneProps> = ({
             <button
               onClick={() => setInfoOpen(!infoOpen)}
               title="Menu"
-              className={`w-10 h-10 rounded-full flex items-center justify-center transition cursor-pointer ${
+              className={`hidden sm:flex w-10 h-10 rounded-full items-center justify-center transition cursor-pointer ${
                 infoOpen
                   ? 'text-[#3b82f6] bg-black/10'
                   : 'text-[#8fa7cc] hover:text-current hover:bg-black/10'
@@ -773,6 +779,94 @@ export const ConversationPane: React.FC<ConversationPaneProps> = ({
             >
               <MoreVertical className="w-[19px] h-[19px]" />
             </button>
+
+            {/* Mobile: every header action lives in this one menu */}
+            <button
+              onClick={() => setMobileMenuOpen((open) => !open)}
+              title="Chat options"
+              aria-label="Chat options"
+              aria-expanded={mobileMenuOpen}
+              className={`sm:hidden w-10 h-10 rounded-full flex items-center justify-center transition cursor-pointer ${
+                mobileMenuOpen
+                  ? 'text-[#3b82f6] bg-black/10'
+                  : 'text-[#8fa7cc] hover:text-current hover:bg-black/10'
+              }`}
+            >
+              <MoreVertical className="w-[19px] h-[19px]" />
+            </button>
+
+            {mobileMenuOpen && (
+              <>
+                <div
+                  className="sm:hidden fixed inset-0 z-30"
+                  onClick={() => setMobileMenuOpen(false)}
+                />
+                <div
+                  className={`sm:hidden absolute top-12 right-0 z-40 w-52 py-1.5 rounded-[10px] border shadow-2xl text-[14px] ${
+                    isLight
+                      ? 'bg-white border-[#cfdcf0] text-[#0a1630]'
+                      : 'bg-[#12254a] border-[#1d3764] text-[#eaf2ff]'
+                  }`}
+                >
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSearchOpen((open) => !open);
+                      setChatSearchQuery('');
+                      setMobileMenuOpen(false);
+                    }}
+                    className="w-full px-4 py-2.5 text-left hover:bg-black/10 flex items-center gap-2.5 cursor-pointer"
+                  >
+                    <Search className="w-4 h-4" /> Search messages
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setWallpaperOpen((open) => !open);
+                      setMobileMenuOpen(false);
+                    }}
+                    className="w-full px-4 py-2.5 text-left hover:bg-black/10 flex items-center gap-2.5 cursor-pointer"
+                  >
+                    <Palette className="w-4 h-4" /> Wallpaper
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setDisappearingModalOpen(true);
+                      setMobileMenuOpen(false);
+                    }}
+                    className="w-full px-4 py-2.5 text-left hover:bg-black/10 flex items-center gap-2.5 cursor-pointer"
+                  >
+                    <Clock className="w-4 h-4" />
+                    {room.disappearingTimer && room.disappearingTimer > 0
+                      ? `Disappearing: ${formatDisappearingDuration(room.disappearingTimer)}`
+                      : 'Disappearing messages'}
+                  </button>
+                  {meta && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        onToggleLock(room.id);
+                        setMobileMenuOpen(false);
+                      }}
+                      className="w-full px-4 py-2.5 text-left hover:bg-black/10 flex items-center gap-2.5 cursor-pointer"
+                    >
+                      <Lock className="w-4 h-4" /> {meta.lockHash ? 'Remove chat lock' : 'Lock chat'}
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setInfoOpen(true);
+                      setMobileMenuOpen(false);
+                    }}
+                    className="w-full px-4 py-2.5 text-left hover:bg-black/10 flex items-center gap-2.5 cursor-pointer"
+                  >
+                    <Info className="w-4 h-4" /> Chat info
+                  </button>
+                </div>
+              </>
+            )}
           </div>
         </header>
 

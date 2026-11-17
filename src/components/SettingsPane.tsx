@@ -13,6 +13,10 @@ interface SettingsPaneProps {
   onChangeTheme: (t: ThemeMode) => void;
   onSignOut: () => void;
   onToast: (msg: string) => void;
+  notificationsEnabled: boolean;
+  notificationPermission: 'unsupported' | 'default' | 'granted' | 'denied';
+  notificationsSupported: boolean;
+  onToggleNotifications: (next: boolean) => void | Promise<void>;
 }
 
 export const SettingsPane: React.FC<SettingsPaneProps> = ({
@@ -22,6 +26,10 @@ export const SettingsPane: React.FC<SettingsPaneProps> = ({
   onChangeTheme,
   onSignOut,
   onToast,
+  notificationsEnabled,
+  notificationPermission,
+  notificationsSupported: browserSupportsNotifications,
+  onToggleNotifications,
 }) => {
   const [displayName, setDisplayName] = useState(me.displayName);
   const [username, setUsername] = useState(me.username);
@@ -200,6 +208,37 @@ export const SettingsPane: React.FC<SettingsPaneProps> = ({
               checked={privacy.soundEnabled}
               onChange={() => togglePrivacyField('soundEnabled')}
               className="accent-[#3b82f6] w-4 h-4"
+            />
+          </label>
+        </div>
+
+        {/* Notifications */}
+        <div className="space-y-3 pt-4 border-t border-[#17294d]">
+          <h2 className="text-[13px] font-medium text-[#3b82f6]">Notifications</h2>
+
+          <label className="flex items-center justify-between py-1 cursor-pointer gap-3">
+            <div>
+              <p className="text-[14.5px]">Message notifications</p>
+              <p className="text-[12.5px] text-[#8fa7cc]">
+                Show a desktop notification when a message arrives in a chat you are not viewing
+              </p>
+              {!browserSupportsNotifications && (
+                <p className="text-[12px] text-[#f15c6d] mt-1">
+                  This browser does not support notifications.
+                </p>
+              )}
+              {browserSupportsNotifications && notificationPermission === 'denied' && (
+                <p className="text-[12px] text-[#f15c6d] mt-1">
+                  Blocked by your browser. Allow notifications for this site in your browser settings.
+                </p>
+              )}
+            </div>
+            <input
+              type="checkbox"
+              checked={notificationsEnabled && notificationPermission === 'granted'}
+              disabled={!browserSupportsNotifications || notificationPermission === 'denied'}
+              onChange={() => void onToggleNotifications(!notificationsEnabled)}
+              className="accent-[#3b82f6] w-4 h-4 shrink-0"
             />
           </label>
         </div>

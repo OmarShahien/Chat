@@ -210,8 +210,26 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
   const bubbleBg = isMine ? bubbleTheme.outgoingBg : bubbleTheme.incomingBg;
   const timeColor = isMine ? bubbleTheme.outgoingTime : bubbleTheme.incomingTime;
   const checkColor = 'text-[#22d3ee] drop-shadow-[0_0_5px_rgba(34,211,238,0.75)]';
+  // Deleted messages and game cards have their own footers, so they show no action row.
+  const showActions = !message.deletedForEveryone && message.type !== 'game';
+
+  /*
+   * A 1-time picture can only be opened once per viewer.
+   *
+   * `openedHere` guards the case where the `viewedBy` update has not arrived
+   * back through the realtime subscription yet: without it a fast second click
+   * could open the photo again. The cached `mediaUrl` is also dropped after
+   * closing so the image cannot be re-opened from memory.
+   */
+  const [openedHere, setOpenedHere] = useState(false);
+  const viewOnceUsed = openedHere || Boolean(message.viewedBy?.[me.uid]);
 
   const handleOpenViewOnce = async () => {
+    if (!isMine && viewOnceUsed) {
+      onToast('This 1-time picture was already opened.');
+      return;
+    }
+
     let url = mediaUrl;
     if (!url && message.mediaId) {
       const payload = await fetchMediaPayload(message.chatId, message.mediaId);
@@ -221,10 +239,13 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
       }
     }
     if (url) {
+      if (!isMine) setOpenedHere(true);
       onOpenLightbox(url, message.text, true);
       if (!isMine) {
         await markViewOnceOpened(message.chatId, message.id, me.uid);
       }
+      // Never keep a 1-time picture addressable after it has been shown.
+      setMediaUrl(null);
     } else {
       onToast('Loading photo...');
     }
@@ -239,8 +260,11 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
       id={`msg-${message.id}`}
       className={`group relative flex w-full px-3 sm:px-[7%] ${
         isMine ? 'justify-end' : 'justify-start'
-      } ${hasReactions ? 'mb-4' : 'mb-0.5'} transition-colors duration-500 ${
+      } transition-colors duration-500 ${
         highlighted ? 'bg-[#8fd0ff]/20 py-1' : ''
+      } ${
+        // Reserve room for the reaction pill pinned under the bubble / action row.
+        hasReactions && showActions ? 'mb-6' : hasReactions || showActions ? 'mb-4' : 'mb-0.5'
       }`}
       onMouseLeave={() => {
         setShowReactions(false);
@@ -296,7 +320,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
               message.viewOnce ? (
                 <div className="my-1">
                   {!isMine ? (
-                    message.viewedBy?.[me.uid] ? (
+                    viewOnceUsed ? (
                       <div className="flex items-center gap-2.5 py-2 px-3 rounded-[10px] bg-black/20 opacity-75">
                         <div className="w-7 h-7 rounded-full border border-white/60 flex items-center justify-center font-bold text-[12px] shrink-0">
                           ✓
@@ -558,7 +582,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
 
         {hasReactions && !message.deletedForEveryone && (
           <div
-            className={`absolute -bottom-3.5 ${
+            className={`absolute -bottom-3 ${
               isMine ? 'right-2' : 'left-2'
             } flex items-center gap-1 px-2 py-0.5 rounded-full border shadow-sm text-xs z-10 ${
               isLight
@@ -591,14 +615,17 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
           </div>
         )}
 
+        {/*
+          The action bar sits *inside* the bubble flow (not absolutely positioned
+          over the text). Overlaying it hid the message body, especially on
+          mobile where it was always visible.
+        */}
         {!message.deletedForEveryone && (
           <div
-            className={`absolute top-1 ${
-              isMine ? 'left-1 sm:left-auto sm:-left-23' : 'right-1 sm:right-auto sm:-right-23'
-            } flex items-center gap-0.5 px-1.5 py-0.5 rounded-full shadow-md border z-20 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 focus-within:opacity-100 transition ${
+            className={`flex items-center justify-end gap-0.5 mt-1 pt-1 border-t opacity-100 sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100 transition-opacity duration-150 ${
               isLight
-                ? 'bg-white border-[#cfdcf0] text-[#4a5f80]'
-                : 'bg-[#16294d] border-[#1d3764] text-[#a9bddb]'
+                ? 'border-[#cfdcf0]/80 text-[#4a5f80]'
+                : 'border-white/10 text-[#a9bddb]'
             }`}
           >
             <button
@@ -633,7 +660,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
 
         {showReactions && (
           <div
-            className={`absolute -top-11 ${
+            className={`absolute -top-9 ${
               isMine ? 'right-0' : 'left-0'
             } z-30 flex items-center gap-1 px-2.5 py-1.5 rounded-full shadow-xl border ${
               isLight ? 'bg-white border-[#cfdcf0]' : 'bg-[#16294d] border-[#1d3764]'
