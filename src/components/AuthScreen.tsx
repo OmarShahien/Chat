@@ -45,11 +45,14 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
   const shownError = errorText || externalError;
 
   return (
-    <div className="min-h-screen bg-[#cfdcf0] text-[#34476a] relative">
+    // #root is height-locked and overflow:hidden for the chat shell, so this page
+    // must scroll inside itself. Without overflow-y-auto a tall card on a phone in
+    // portrait is clipped and the sign-in button cannot be reached at all.
+    <div className="h-full overflow-y-auto bg-[#cfdcf0] text-[#34476a] relative">
       {/* Navy top band */}
       <div className="h-[222px] bg-gradient-to-br from-[#0c1b36] to-[#1d4ed8] w-full absolute top-0 left-0" />
 
-      <div className="relative z-10 max-w-[960px] mx-auto px-4 sm:px-6 pt-7 pb-14">
+      <div className="relative z-10 max-w-[960px] mx-auto px-4 sm:px-6 pt-6 sm:pt-7 pb-14">
         {/* Top brand name */}
         <div className="flex items-center gap-3.5 mb-7">
           <span className="text-[14px] font-medium tracking-[0.04em] text-white uppercase">
@@ -58,14 +61,14 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
         </div>
 
         {/* Main White Card */}
-        <div className="bg-white rounded-[3px] shadow-[0_17px_50px_0_rgba(11,20,26,0.19),0_12px_15px_0_rgba(11,20,26,0.24)] px-8 sm:px-14 py-11 sm:py-14 grid md:grid-cols-12 gap-10 items-center">
-          {/* Instructions column */}
-          <div className="md:col-span-7 space-y-6">
+        <div className="bg-white rounded-[3px] shadow-[0_17px_50px_0_rgba(11,20,26,0.19),0_12px_15px_0_rgba(11,20,26,0.24)] px-5 sm:px-14 py-7 sm:py-14 grid md:grid-cols-12 gap-6 md:gap-10 items-center">
+          {/* Instructions column — second on phones so the button is not pushed off-screen */}
+          <div className="order-2 md:order-1 md:col-span-7 space-y-5 sm:space-y-6">
             <h1 className="text-[26px] sm:text-[28px] font-light text-[#3b4f73] leading-snug">
               Use Chat Web on your computer
             </h1>
 
-            <ol className="list-decimal list-inside space-y-4 text-[16px] text-[#34476a] leading-7">
+            <ol className="list-decimal list-inside space-y-2.5 sm:space-y-4 text-[15px] sm:text-[16px] text-[#34476a] leading-7">
               <li>Sign in with your Google account</li>
               <li>Add your friends by email address, @username, or invite code</li>
               <li>Start messaging privately in real time</li>
@@ -89,7 +92,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
           </div>
 
           {/* Google Sign-In column */}
-          <div className="md:col-span-5 md:border-l border-[#dde8f8] md:pl-10 flex flex-col items-center justify-center text-center space-y-4 py-4">
+          <div className="order-1 md:order-2 md:col-span-5 md:border-l border-[#dde8f8] md:pl-10 flex flex-col items-center justify-center text-center space-y-4 py-2 sm:py-4">
             <button
               onClick={() => handleGoogleSignIn(false)}
               disabled={loading}
